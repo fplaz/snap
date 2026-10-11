@@ -2,9 +2,14 @@ import AppKit
 import Carbon
 import UniformTypeIdentifiers
 import os
+import Combine
 
 @MainActor
 final class CaptureCoordinator {
+    var onCaptureStarted: (() -> Void)?
+    var onCaptureEnded: (() -> Void)?
+    private let uploads: UploadCoordinator?
+    private var uploadObservation: AnyCancellable?
     private var session = CaptureSession()
     private let document = AnnotationDocument()
     private var snapshots: [CGDirectDisplayID: DisplaySnapshot] = [:]
@@ -15,10 +20,14 @@ final class CaptureCoordinator {
     private var previousApplication: NSRunningApplication?
     private var savePanel: NSSavePanel?
     private var displayObserver: NSObjectProtocol?
-    private let log = OSLog(subsystem: "cl.assetplan.snap", category: "Capture")
+    private let log = OSLog(subsystem: "cl.fplaz.snap", category: "Capture")
     private var captureSignpost: OSSignpostID?
 
-    init() {
+    init(uploads: UploadCoordinator? = nil) {
+        self.uploads = uploads
+        uploadObservation = uploads?.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { self?.refreshUploadAvailability() }
+        }
         displayObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -35,6 +44,7 @@ final class CaptureCoordinator {
         let previous = NSWorkspace.shared.frontmostApplication
         guard ScreenPermission.ensureAccess() else { return }
         guard let id = session.begin() else { return }
+        onCaptureStarted?()
         previousApplication = previous?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : previous
         let displays = NSScreen.screens.compactMap { screen -> ScreenCaptureService.Display? in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return nil }
@@ -56,8 +66,17 @@ final class CaptureCoordinator {
                 self.endCaptureSignpost()
             } catch {
                 guard let self, self.session.id == id else { return }
+                if !(error is CancellationError) {
+                    let failure = error as NSError
+                    os_log("Capture failed: domain=%{public}@ code=%ld preflight=%{public}@", log: self.log,
+                           type: .error, failure.domain, failure.code, ScreenPermission.hasAccess ? "granted" : "denied")
+                }
                 self.finish(restoreFocus: true)
-                if !(error is CancellationError) { self.showError(error) }
+                if ScreenCaptureService.isPermissionDenied(error) {
+                    _ = ScreenPermission.ensureAccess(afterCaptureDenied: true)
+                } else if !(error is CancellationError) {
+                    self.showError(error)
+                }
             }
         }
     }
@@ -75,12 +94,16 @@ final class CaptureCoordinator {
             panel.makeFirstResponder(view)
             view.onBeginSelection = { [weak self] in self?.beginSelection() ?? false }
             view.onSelect = { [weak self] rectangle in self?.selected(rectangle, on: snapshot.displayID) }
+            view.onMoveSelection = { [weak self] rectangle in _ = self?.session.moveSelection(to: rectangle) }
+            view.onResizeSelection = { [weak self] rectangle in _ = self?.session.resizeSelection(to: rectangle) }
             view.onCancel = { [weak self] in self?.cancel() }
             view.onCopy = { [weak self] in self?.copy() }
             view.onSave = { [weak self] in self?.save() }
+            view.onUpload = { [weak self] in self?.upload() }
             view.onStartOver = { [weak self] in self?.startOver() }
             panels[snapshot.displayID] = panel
         }
+        refreshUploadAvailability()
         NSApp.activate(ignoringOtherApps: true)
         for panel in panels.values { panel.orderFrontRegardless() }
         let pointer = NSEvent.mouseLocation
@@ -112,7 +135,8 @@ final class CaptureCoordinator {
             throw CaptureError.invalidSelection
         }
         return try ScreenshotExporter.compose(image: snapshot.image, selection: selection.rectangle,
-                                              logicalSize: snapshot.logicalSize, annotations: document.annotations)
+                                              logicalSize: snapshot.logicalSize,
+                                              annotations: (panels[selection.displayID]?.contentView as? CaptureOverlayView)?.exportAnnotations ?? document.annotations)
     }
 
     private func prepareOutput() -> Bool {
@@ -129,6 +153,34 @@ final class CaptureCoordinator {
 
     private func setExporting(_ exporting: Bool) {
         for panel in panels.values { (panel.contentView as? CaptureOverlayView)?.isExporting = exporting }
+    }
+
+    private func refreshUploadAvailability() {
+        for panel in panels.values {
+            (panel.contentView as? CaptureOverlayView)?.toolbar.setUploadAvailability(uploads?.canUpload == true,
+                hint: uploads?.uploadHint ?? "Sign in from the Snap menu to upload")
+        }
+    }
+
+    private func upload() {
+        guard let uploads, uploads.canUpload, session.phase == .ready, prepareOutput(),
+              let id = session.beginExport() else { return }
+        setExporting(true)
+        do {
+            let image = try crop()
+            exportTask = Task { [weak self] in
+                do {
+                    let png = try await Task.detached(priority: .userInitiated) { try ScreenshotExporter.png(image: image) }.value
+                    guard let self, !Task.isCancelled, self.session.isExporting(id) else { return }
+                    let job = try await uploads.stage(png)
+                    guard !Task.isCancelled, self.session.isExporting(id) else {
+                        uploads.discardLocal(); return
+                    }
+                    self.finish(restoreFocus: true)
+                    uploads.begin(job)
+                } catch { self?.exportFailed(error, id: id) }
+            }
+        } catch { exportFailed(error, id: id) }
     }
 
     private func copy() {
@@ -200,7 +252,7 @@ final class CaptureCoordinator {
     private func exportFailed(_ error: Error, id: UUID) {
         guard session.isExporting(id) else { return }
         resumeExport(id)
-        showError(error)
+        if !(error is CancellationError) { showError(error) }
     }
 
     func cancel() { finish(restoreFocus: true) }
@@ -221,10 +273,12 @@ final class CaptureCoordinator {
         document.reset()
         NSCursor.arrow.set()
         endCaptureSignpost()
-        if restoreFocus, let previousApplication, !previousApplication.isTerminated {
+        if restoreFocus, let previousApplication, !previousApplication.isTerminated,
+           previousApplication.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             previousApplication.activate(options: [])
         }
         previousApplication = nil
+        onCaptureEnded?()
     }
 
     private func endCaptureSignpost() {

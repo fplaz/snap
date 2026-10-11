@@ -15,5 +15,6 @@ final class CaptureOverlayPanel: NSPanel {
         isReleasedWhenClosed = false
         animationBehavior = .none
         isMovable = false
+        acceptsMouseMovedEvents = true
     }
 }

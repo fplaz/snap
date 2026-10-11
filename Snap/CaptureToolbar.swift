@@ -2,8 +2,9 @@ import AppKit
 
 @MainActor
 final class CaptureToolbar: NSView {
-    static let preferredSize = CGSize(width: 408, height: 52)
+    static let preferredSize = CGSize(width: 442, height: 52)
     var onCopy: (() -> Void)?
+    var onUpload: (() -> Void)?
     var onSave: (() -> Void)?
     var onCancel: (() -> Void)?
     var onStartOver: (() -> Void)?
@@ -15,6 +16,8 @@ final class CaptureToolbar: NSView {
     private var dragOrigin: CGPoint?
     private var originalOrigin = CGPoint.zero
     private var editingControls: [NSControl] = []
+    private var uploadButton: NSButton!
+    private var uploadAvailable = false
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private let tool = NSPopUpButton()
@@ -35,7 +38,7 @@ final class CaptureToolbar: NSView {
         let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat"]
         popup(tool, labels: AnnotationTool.allCases.map(\.rawValue), images: symbols.map { symbol($0) },
               x: 30, label: "Drawing tool", action: #selector(toolChanged))
-        tool.selectItem(at: 1)
+        tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: .rectangle)!)
         popup(color, labels: AnnotationColor.allCases.map { $0.rawValue.capitalized },
               images: AnnotationColor.allCases.map { swatch($0.nsColor) },
               x: 78, label: "Annotation color", action: #selector(styleChanged))
@@ -49,10 +52,12 @@ final class CaptureToolbar: NSView {
         undoButton.toolTip = "Undo (⌘Z)"; redoButton.toolTip = "Redo (⌘⇧Z)"
         _ = button("Copy", symbol: "doc.on.doc", x: 266, action: #selector(copyImage))
         _ = button("Save", symbol: "square.and.arrow.down", x: 300, action: #selector(saveImage))
-        _ = button("Clear Annotations", symbol: "arrow.counterclockwise", x: 334, action: #selector(startOver))
-        let cancel = button("Cancel", symbol: "xmark", x: 368, action: #selector(cancel))
+        uploadButton = button("Upload & Copy Link", symbol: "icloud.and.arrow.up", x: 334, action: #selector(upload))
+        _ = button("Clear Annotations", symbol: "arrow.counterclockwise", x: 368, action: #selector(startOver))
+        let cancel = button("Cancel", symbol: "xmark", x: 402, action: #selector(cancel))
         editingControls.removeAll { $0 === cancel }
         toolTip = "Drag the six-dot handle to move the toolbar"
+        setUploadAvailability(false, hint: "Sign in from the Snap menu to upload")
         updateHistory(canUndo: false, canRedo: false)
     }
 
@@ -121,10 +126,17 @@ final class CaptureToolbar: NSView {
         redoButton.isEnabled = canRedo && !exporting
     }
 
+    func setUploadAvailability(_ available: Bool, hint: String) {
+        uploadAvailable = available
+        uploadButton.isEnabled = available && !exporting
+        uploadButton.toolTip = hint
+    }
+
     func setExporting(_ exporting: Bool) {
         self.exporting = exporting
         dragOrigin = nil
         editingControls.forEach { $0.isEnabled = !exporting }
+        uploadButton.isEnabled = uploadAvailable && !exporting
         updateHistory(canUndo: canUndo, canRedo: canRedo)
     }
 
@@ -213,6 +225,7 @@ final class CaptureToolbar: NSView {
     @objc private func undo() { onUndo?() }
     @objc private func redo() { onRedo?() }
     @objc private func copyImage() { onCopy?() }
+    @objc private func upload() { onUpload?() }
     @objc private func saveImage() { onSave?() }
     @objc private func startOver() { onStartOver?() }
     @objc private func cancel() { onCancel?() }

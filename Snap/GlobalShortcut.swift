@@ -9,7 +9,7 @@ final class GlobalShortcut {
     private let onInvoke: () -> Void
     private let identifier: UInt32
     private(set) var registrationStatus: OSStatus = noErr
-    private let logger = Logger(subsystem: "cl.assetplan.snap", category: "Shortcut")
+    private let logger = Logger(subsystem: "cl.fplaz.snap", category: "Shortcut")
 
     init(keyCode: UInt32 = UInt32(kVK_ANSI_7), modifiers: UInt32 = UInt32(cmdKey | shiftKey),
          identifier: UInt32 = 1, onInvoke: @escaping () -> Void) {

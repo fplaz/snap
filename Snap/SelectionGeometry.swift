@@ -41,4 +41,16 @@ enum SelectionGeometry {
         }
         return CGRect(origin: CGPoint(x: x, y: y), size: size)
     }
+
+    static func resizedToolbar(original: CGRect, from start: CGRect, to selection: CGRect, bounds: CGRect) -> CGRect {
+        let x = original.maxX >= start.maxX
+            ? original.minX + selection.maxX - start.maxX
+            : min(original.minX, selection.maxX - original.width)
+        let y = original.maxY <= start.minY
+            ? original.minY + selection.minY - start.minY
+            : max(original.minY, selection.minY - 10 - original.height)
+        return CGRect(x: min(max(x, bounds.minX), max(bounds.minX, bounds.maxX - original.width)),
+                      y: min(max(y, bounds.minY), max(bounds.minY, bounds.maxY - original.height)),
+                      width: original.width, height: original.height)
+    }
 }

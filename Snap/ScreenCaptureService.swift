@@ -2,6 +2,12 @@ import AppKit
 import ScreenCaptureKit
 
 enum ScreenCaptureService {
+    static func isPermissionDenied(_ error: Error) -> Bool {
+        let failure = error as NSError
+        return failure.domain == SCStreamError.errorDomain &&
+            failure.code == SCStreamError.Code.userDeclined.rawValue
+    }
+
     struct Display {
         let id: CGDirectDisplayID
         let frame: CGRect

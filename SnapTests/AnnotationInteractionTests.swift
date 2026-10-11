@@ -22,6 +22,124 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
+    func testDefaultToolCreatesRectangleAndToolbarShowsRectangle() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        let popup = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+            .first { $0.accessibilityLabel() == "Drawing tool" })
+        XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .rectangle))
+        view.mouseDown(with: mouse(.leftMouseDown, x: 70, y: 100))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 120, y: 130))
+        XCTAssertEqual(document.annotations.first?.tool, .rectangle)
+    }
+
+    @MainActor
+    func testWholeCanvasDragStartsNearEitherSideOfBorderWithoutDrawing() async throws {
+        for startX: CGFloat in [14, 26] {
+            let (window, view, document) = try fixture()
+            defer { window.close() }
+            let original = try XCTUnwrap(view.selection)
+            view.mouseDown(with: mouse(.leftMouseDown, x: startX, y: 160))
+            view.mouseUp(with: mouse(.leftMouseUp, x: startX + 15, y: 170))
+            XCTAssertEqual(view.selection, original.offsetBy(dx: 15, dy: 10))
+            XCTAssertTrue(document.annotations.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testCornerResizeKeepsAnnotationsAtScreenPositionAndUpdatesExportCoordinates() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 70, y: 100))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 120, y: 130))
+        let annotations = document.annotations
+        let original = try XCTUnwrap(view.selection)
+        var resized: CGRect?
+        view.onResizeSelection = { resized = $0 }
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX - 2, y: original.minY + 2))
+        XCTAssertFalse(view.prepareForExport())
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: original.maxX - 102, y: original.minY + 62))
+        view.mouseUp(with: mouse(.leftMouseUp, x: original.maxX - 102, y: original.minY + 62))
+        XCTAssertEqual(view.selection, CGRect(x: 20, y: 80, width: 230, height: 180))
+        XCTAssertEqual(resized, view.selection)
+        XCTAssertEqual(document.annotations, annotations)
+        XCTAssertEqual(view.exportAnnotations, annotations.map { $0.moved(by: CGPoint(x: 0, y: -60)) })
+        XCTAssertTrue(view.prepareForExport())
+        // Growing back restores the export coordinates without modifying the document or undo history.
+        view.mouseDown(with: mouse(.leftMouseDown, x: 248, y: 82))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 348, y: 22))
+        XCTAssertEqual(view.selection, original)
+        XCTAssertEqual(view.exportAnnotations, annotations)
+    }
+
+    @MainActor
+    func testCornerResizeEscapeRestoresCanvasToolbarAndAnnotationOffset() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let original = try XCTUnwrap(view.selection)
+        let toolbar = view.toolbar.frame
+        view.mouseDown(with: mouse(.leftMouseDown, x: 348, y: 22))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: -100, y: 1000))
+        XCTAssertEqual(view.selection?.size, CGSize(width: 16, height: 16))
+        view.keyDown(with: escape())
+        view.mouseUp(with: mouse(.leftMouseUp, x: -100, y: 1000))
+        XCTAssertEqual(view.selection, original)
+        XCTAssertEqual(view.toolbar.frame, toolbar)
+    }
+
+    @MainActor
+    func testBorderDragMovesSelectionAndToolbarWithoutChangingAnnotations() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 70, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 120, y: 110))
+        let annotations = document.annotations
+        let original = try XCTUnwrap(view.selection)
+        let toolbar = view.toolbar.frame
+        var moved: CGRect?
+        view.onMoveSelection = { moved = $0 }
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 140))
+        XCTAssertFalse(view.prepareForExport())
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: original.maxX + 15, y: 150))
+        view.mouseUp(with: mouse(.leftMouseUp, x: original.maxX + 15, y: 150))
+        XCTAssertEqual(view.selection, original.offsetBy(dx: 15, dy: 10))
+        XCTAssertEqual(moved, view.selection)
+        XCTAssertEqual(document.annotations, annotations)
+        XCTAssertEqual(view.toolbar.frame, toolbar.offsetBy(dx: 15, dy: 10))
+        XCTAssertTrue(view.prepareForExport())
+    }
+
+    @MainActor
+    func testBorderDragClampsToDisplayAndEscapeRestoresSelection() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let original = try XCTUnwrap(view.selection)
+        let toolbar = view.toolbar.frame
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 140))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: 1000, y: 1000))
+        XCTAssertEqual(view.selection?.maxX, view.bounds.maxX)
+        XCTAssertEqual(view.selection?.maxY, view.bounds.maxY)
+        view.keyDown(with: escape())
+        view.mouseUp(with: mouse(.leftMouseUp, x: 1000, y: 1000))
+        XCTAssertEqual(view.selection, original)
+        XCTAssertEqual(view.toolbar.frame, toolbar)
+    }
+
+    @MainActor
+    func testNonKeyOverlayAcceptsFirstClickAndCreatesSelectionWithFirstDrag() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.clearSelection()
+        XCTAssertFalse(window.isKeyWindow)
+        let down = mouse(.leftMouseDown, x: 30, y: 40)
+        XCTAssertTrue(view.acceptsFirstMouse(for: down))
+        view.mouseDown(with: down)
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: 180, y: 160))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 180, y: 160))
+        XCTAssertEqual(view.selection, CGRect(x: 30, y: 40, width: 150, height: 120))
+    }
+
+    @MainActor
     func testDrawingDoesNotReplaceCaptureAndIsOneUndoOperation() async throws {
         let (window, view, document) = try fixture()
         defer { window.close() }

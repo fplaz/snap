@@ -1,0 +1,10 @@
+# Private beta packaging — 2026-10-05
+
+- Repeatable command: `bash scripts/build-private-beta.sh`. Output: `.build/private-beta/dist/Snap-0.1.0-private-beta.dmg` with a SHA-256 companion file.
+- Release executable contains arm64 and x86_64 slices; minimum supported OS is macOS 14. Packaged app has the configured public Google OAuth client, callback scheme, icon, installation guide, and Applications shortcut.
+- The beta was signed with the installed Apple Development identity, without an embedded provisioning profile or restricted entitlements. This is an unnotarized private beta; friends must use the per-app Open Anyway approval in Privacy & Security. Developer ID / notarization remain future release work.
+- `SNAP_PRIVATE_BETA` selects GTMAppAuth's supported file-based Keychain option with a beta-specific item name. Standard builds retain their existing data-protection Keychain setup. No credentials are included in the installer.
+- Both beta and normal configurations passed **82 tests, 0 failures** (`/tmp/snap-beta-tests.log`, `/tmp/snap-standard-auth-store-tests.log`). A signed, isolated Security-framework smoke check saved, read, and removed a uniquely named dummy item in the file-based Keychain without access-group entitlements; existing Google credentials were not accessed.
+- DMG checksums verified. The DMG was mounted read-only and its actual app passed `codesign --verify --deep --strict`; installer contents and absence of a provisioning profile were checked. Staging and unsigned product apps are unregistered and removed after packaging to avoid the duplicate-bundle native-reopen bug.
+- No Google sign-in, screenshot capture, Gatekeeper override, or Intel execution was tested on another Mac. First friend acceptance check should cover installing to Applications, ejecting the DMG, Open Anyway, Screen Recording grant/native reopen, capture/copy/save, Google sign-in, upload, relaunch with restored login, and sign-out.
+- For a Google OAuth project in testing mode, add testers' Google emails to the project's test-user list. Beta updates may prompt again for Screen Recording or Keychain access.

@@ -71,6 +71,28 @@ final class CaptureSessionTests: XCTestCase {
         }
     }
 
+    func testMovedSelectionIsUsedForExportAndCannotMoveDuringExport() throws {
+        var session = try readySession()
+        let moved = CGRect(x: 100, y: 150, width: 200, height: 100)
+        XCTAssertTrue(session.moveSelection(to: moved))
+        XCTAssertEqual(session.selection?.rectangle, moved)
+        XCTAssertEqual(session.selection?.displayID, 1)
+        XCTAssertFalse(session.moveSelection(to: CGRect(x: 100, y: 150, width: 20, height: 20)))
+        XCTAssertNotNil(session.beginExport())
+        XCTAssertEqual(session.selection?.rectangle, moved)
+        XCTAssertFalse(session.moveSelection(to: moved.offsetBy(dx: 10, dy: 10)))
+    }
+
+    func testResizeUpdatesExportSelectionOnlyWhileReadyAndKeepsTopLeftFixed() throws {
+        var session = try readySession()
+        let resized = CGRect(x: 50, y: 50, width: 300, height: 150)
+        XCTAssertTrue(session.resizeSelection(to: resized))
+        XCTAssertEqual(session.selection?.rectangle, resized)
+        XCTAssertFalse(session.resizeSelection(to: resized.offsetBy(dx: 1, dy: 0)))
+        XCTAssertNotNil(session.beginExport())
+        XCTAssertFalse(session.resizeSelection(to: resized))
+    }
+
     private func readySession() throws -> CaptureSession {
         var session = CaptureSession()
         XCTAssertTrue(session.prepared(try XCTUnwrap(session.begin())))

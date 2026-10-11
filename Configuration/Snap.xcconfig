@@ -1,0 +1,4 @@
+// Optional local OAuth configuration; client IDs are public identifiers.
+GOOGLE_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID = snap-unconfigured
+#include? "Google.local.xcconfig"

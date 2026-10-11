@@ -2,6 +2,32 @@ import XCTest
 import CoreGraphics
 
 final class SelectionGeometryTests: XCTestCase {
+    func testResizeToolbarFollowsOutsideEdgesAndWaitsForInsideEdges() {
+        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        let start = CGRect(x: 100, y: 300, width: 400, height: 400)
+        let outside = CGRect(x: 520, y: 230, width: 100, height: 50)
+        let expanded = CGRect(x: 100, y: 200, width: 500, height: 500)
+        XCTAssertEqual(SelectionGeometry.resizedToolbar(original: outside, from: start, to: expanded, bounds: bounds),
+                       outside.offsetBy(dx: 100, dy: -100))
+        let inside = CGRect(x: 350, y: 350, width: 100, height: 50)
+        let partial = CGRect(x: 100, y: 370, width: 380, height: 330)
+        XCTAssertEqual(SelectionGeometry.resizedToolbar(original: inside, from: start, to: partial, bounds: bounds), inside)
+        let crossed = CGRect(x: 100, y: 450, width: 200, height: 250)
+        XCTAssertEqual(SelectionGeometry.resizedToolbar(original: inside, from: start, to: crossed, bounds: bounds),
+                       CGRect(x: 200, y: 390, width: 100, height: 50))
+        XCTAssertEqual(SelectionGeometry.resizedToolbar(original: inside, from: start, to: start, bounds: bounds), inside)
+    }
+    func testResizeKeepsToolbarRightEdgeAttachedInBothDirections() {
+        let bounds = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        let start = CGRect(x: 100, y: 300, width: 400, height: 400)
+        let toolbar = CGRect(x: 350, y: 230, width: 150, height: 50)
+        for width: CGFloat in [250, 550] {
+            let resized = CGRect(x: 100, y: 300, width: width, height: 400)
+            let frame = SelectionGeometry.resizedToolbar(original: toolbar, from: start, to: resized, bounds: bounds)
+            XCTAssertEqual(frame.maxX, resized.maxX)
+            XCTAssertEqual(frame.minY, toolbar.minY)
+        }
+    }
     func testReversedDragNormalizesAndClampsToDisplay() {
         let rectangle = SelectionGeometry.rectangle(from: CGPoint(x: 250, y: 180),
                                                      to: CGPoint(x: -30, y: 40),

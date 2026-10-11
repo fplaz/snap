@@ -2,6 +2,14 @@ import XCTest
 import ScreenCaptureKit
 
 final class ScreenCaptureServiceTests: XCTestCase {
+    func testCapturePermissionDenialIsRecognizedByDomainAndCode() {
+        let code = SCStreamError.Code.userDeclined.rawValue
+        XCTAssertTrue(ScreenCaptureService.isPermissionDenied(NSError(domain: SCStreamError.errorDomain, code: code)))
+        XCTAssertFalse(ScreenCaptureService.isPermissionDenied(NSError(domain: NSCocoaErrorDomain, code: code)))
+        XCTAssertFalse(ScreenCaptureService.isPermissionDenied(NSError(domain: SCStreamError.errorDomain, code: -1)))
+        XCTAssertFalse(ScreenCaptureService.isPermissionDenied(CancellationError()))
+    }
+
     func testRetinaCaptureMatchesDisplayRenderingPixels() {
         // This display reports 1710×1112 logical points but renders at 3420×2224.
         let configuration = ScreenCaptureService.configuration(

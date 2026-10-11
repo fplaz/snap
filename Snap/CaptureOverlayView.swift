@@ -9,7 +9,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var tracking: NSTrackingArea?
     let toolbar = CaptureToolbar()
     let document: AnnotationDocument
-    private var tool: AnnotationTool = .pen
+    private var tool: AnnotationTool = .rectangle
     private var style = AnnotationStyle()
     private var selectedID: UUID?
     private var draft: Annotation?
@@ -17,11 +17,22 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var annotationOrigin: CGPoint?
     private var textEditor: AnnotationTextEditor?
     private var editingText: Annotation?
+    private var areaDrag: (start: CGPoint, selection: CGRect, toolbar: CGRect)?
+    private var areaResize: (start: CGPoint, selection: CGRect, toolbar: CGRect, offset: CGPoint)?
+    private var annotationOffset: CGPoint = .zero
+    private let borderHitWidth: CGFloat = 7
+    private var contentOrigin: CGPoint {
+        CGPoint(x: (selection?.minX ?? 0) + annotationOffset.x, y: (selection?.minY ?? 0) + annotationOffset.y)
+    }
+    var exportAnnotations: [Annotation] { document.annotations.map { $0.moved(by: annotationOffset) } }
 
     var onBeginSelection: (() -> Bool)?
     var onSelect: ((CGRect) -> Void)?
+    var onMoveSelection: ((CGRect) -> Void)?
+    var onResizeSelection: ((CGRect) -> Void)?
     var onCancel: (() -> Void)?
     var onCopy: (() -> Void)?
+    var onUpload: (() -> Void)?
     var onSave: (() -> Void)?
     var onStartOver: (() -> Void)?
     var isExporting = false {
@@ -38,11 +49,13 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         toolbar.onTool = { [weak self] tool in
             guard let self else { return }
             self.commitText(); self.cancelGesture(); self.selectedID = nil; self.tool = tool; self.changed()
+            self.window?.invalidateCursorRects(for: self)
         }
         toolbar.onStyle = { [weak self] style in self?.changeStyle(style) }
         toolbar.onUndo = { [weak self] in self?.undoAnnotation() }
         toolbar.onRedo = { [weak self] in self?.redoAnnotation() }
         toolbar.onCopy = { [weak self] in self?.onCopy?() }
+        toolbar.onUpload = { [weak self] in self?.onUpload?() }
         toolbar.onSave = { [weak self] in self?.onSave?() }
         toolbar.onCancel = { [weak self] in self?.onCancel?() }
         toolbar.onStartOver = { [weak self] in self?.onStartOver?() }
@@ -51,16 +64,33 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
     override var acceptsFirstResponder: Bool { true }
 
+    // Each display has its own window; the first drag must also select in a non-key overlay.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds, options: [.activeAlways, .cursorUpdate, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(rect: bounds, options: [.activeAlways, .cursorUpdate, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect], owner: self)
         addTrackingArea(area)
         tracking = area
     }
 
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        addCursorRect(bounds, cursor: toolCursor)
+        if let selection, dragOrigin == nil, !isExporting {
+            let cursor: NSCursor = areaDrag == nil ? .openHand : .closedHand
+            let outer = selection.insetBy(dx: -borderHitWidth, dy: -borderHitWidth)
+            let edges = [
+                CGRect(x: outer.minX, y: outer.minY, width: outer.width, height: borderHitWidth * 2),
+                CGRect(x: outer.minX, y: selection.maxY - borderHitWidth, width: outer.width, height: borderHitWidth * 2),
+                CGRect(x: outer.minX, y: selection.minY, width: borderHitWidth * 2, height: selection.height),
+                CGRect(x: selection.maxX - borderHitWidth, y: selection.minY, width: borderHitWidth * 2, height: selection.height)
+            ]
+            for edge in edges { addCursorRect(edge.intersection(bounds), cursor: cursor) }
+            if let handle = resizeHandle {
+                addCursorRect(handle.intersection(bounds), cursor: areaResize == nil ? .openHand : .closedHand)
+            }
+        }
         if !toolbar.isHidden {
             addCursorRect(toolbar.frame, cursor: .arrow)
             addCursorRect(CGRect(x: toolbar.frame.minX, y: toolbar.frame.minY,
@@ -69,13 +99,36 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     override func cursorUpdate(with event: NSEvent) {
+        if areaDrag != nil { NSCursor.closedHand.set(); return }
+        if areaResize != nil { NSCursor.closedHand.set(); return }
         let point = convert(event.locationInWindow, from: nil)
         if !toolbar.isHidden, toolbar.frame.contains(point) {
             if point.x < toolbar.frame.minX + 28 { NSCursor.openHand.set() }
             else { NSCursor.arrow.set() }
         }
-        else { NSCursor.crosshair.set() }
+        else {
+            if resizeHandle?.contains(point) == true { NSCursor.openHand.set() }
+            else if isSelectionBorder(point) { NSCursor.openHand.set() }
+            else { toolCursor.set() }
+        }
     }
+
+    private var toolCursor: NSCursor { tool == .select ? .arrow : .crosshair }
+
+    private var resizeHandle: CGRect? {
+        guard let selection, dragOrigin == nil, !isExporting else { return nil }
+        return CGRect(x: selection.maxX - 18, y: selection.minY - 6, width: 24, height: 24)
+    }
+
+    private func isSelectionBorder(_ point: CGPoint) -> Bool {
+        guard let selection, dragOrigin == nil, !isExporting else { return false }
+        if !toolbar.isHidden, toolbar.frame.contains(point) { return false }
+        return (selection.insetBy(dx: -borderHitWidth, dy: -borderHitWidth).contains(point)
+                && !selection.insetBy(dx: borderHitWidth, dy: borderHitWidth).contains(point))
+    }
+
+    override func mouseMoved(with event: NSEvent) { cursorUpdate(with: event) }
+    override func mouseEntered(with event: NSEvent) { cursorUpdate(with: event) }
 
     override func draw(_ dirtyRect: NSRect) {
         screenshot.draw(in: bounds)
@@ -89,11 +142,12 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if let selection, selection.width > 0, selection.height > 0 {
             NSGraphicsContext.saveGraphicsState()
             NSBezierPath(rect: selection).addClip()
-            let transform = AffineTransform(translationByX: selection.minX, byY: selection.minY)
+            let transform = AffineTransform(translationByX: contentOrigin.x, byY: contentOrigin.y)
             (transform as NSAffineTransform).concat()
             var annotations = document.annotations.filter { $0.id != editingText?.id && $0.id != draft?.id }
             if let draft { annotations.append(draft) }
-            AnnotationRenderer.draw(annotations, in: CGRect(origin: .zero, size: selection.size))
+            AnnotationRenderer.draw(annotations, in: CGRect(x: -annotationOffset.x, y: -annotationOffset.y,
+                                                            width: selection.width, height: selection.height))
             if let selected = annotations.first(where: { $0.id == selectedID }) {
                 NSColor.white.setStroke()
                 let outline = NSBezierPath(rect: selected.bounds.insetBy(dx: -4, dy: -4))
@@ -106,6 +160,15 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             let border = NSBezierPath(rect: selection)
             border.lineWidth = 1
             border.stroke()
+            if dragOrigin == nil {
+                NSColor.black.setStroke()
+                let corner = NSBezierPath()
+                corner.lineWidth = 2.5
+                corner.move(to: CGPoint(x: selection.maxX - 13, y: selection.minY + 1.5))
+                corner.line(to: CGPoint(x: selection.maxX - 1.5, y: selection.minY + 1.5))
+                corner.line(to: CGPoint(x: selection.maxX - 1.5, y: selection.minY + 13))
+                corner.stroke()
+            }
         } else {
             let text = "Drag to capture · Esc to cancel" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
@@ -125,9 +188,24 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if let selection {
             commitText()
             let position = convert(event.locationInWindow, from: nil)
+            if resizeHandle?.contains(position) == true, toolbar.isHidden || !toolbar.frame.contains(position) {
+                cancelGesture(); selectedID = nil
+                window?.makeKey(); window?.makeFirstResponder(self)
+                areaResize = (position, selection, toolbar.frame, annotationOffset)
+                NSCursor.closedHand.set()
+                needsDisplay = true
+                return
+            }
+            if isSelectionBorder(position) {
+                cancelGesture()
+                window?.makeKey(); window?.makeFirstResponder(self)
+                areaDrag = (position, selection, toolbar.frame)
+                NSCursor.closedHand.set(); needsDisplay = true
+                return
+            }
             guard selection.contains(position) else { return }
             window?.makeKey(); window?.makeFirstResponder(self)
-            let point = CGPoint(x: position.x - selection.minX, y: position.y - selection.minY)
+            let point = CGPoint(x: position.x - contentOrigin.x, y: position.y - contentOrigin.y)
             selectedID = nil
             if tool == .select {
                 if let annotation = document.hit(at: point) {
@@ -136,8 +214,9 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                     moveOriginal = annotation; draft = annotation; annotationOrigin = point
                 }
             } else if tool == .text {
-                let rect = CGRect(x: point.x, y: max(0, point.y - style.fontSize * 1.4),
-                                  width: min(280, selection.width - point.x), height: min(point.y, style.fontSize * 1.4))
+                let rect = CGRect(x: point.x, y: max(-annotationOffset.y, point.y - style.fontSize * 1.4),
+                                  width: min(280, selection.width - annotationOffset.x - point.x),
+                                  height: min(point.y + annotationOffset.y, style.fontSize * 1.4))
                 beginText(Annotation(tool: .text, points: [], style: style, textRect: rect))
             } else {
                 draft = Annotation(tool: tool, points: [point, point], style: style)
@@ -155,6 +234,8 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if areaResize != nil { resizeSelection(with: event); return }
+        if areaDrag != nil { moveSelection(with: event); return }
         if annotationOrigin != nil { updateAnnotation(event); return }
         guard let dragOrigin, !isExporting else { return }
         selection = SelectionGeometry.rectangle(from: dragOrigin,
@@ -163,6 +244,19 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if areaResize != nil {
+            resizeSelection(with: event); areaResize = nil
+            if let selection { onResizeSelection?(selection) }
+            cursorUpdate(with: event); needsDisplay = true
+            return
+        }
+        if areaDrag != nil {
+            moveSelection(with: event)
+            areaDrag = nil
+            if let selection { onMoveSelection?(selection) }
+            cursorUpdate(with: event); needsDisplay = true
+            return
+        }
         if annotationOrigin != nil {
             updateAnnotation(event)
             if let draft { document.commit(draft) }
@@ -198,6 +292,8 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     func clearSelection() {
+        areaResize = nil; annotationOffset = .zero
+        areaDrag = nil
         cancelText(); cancelGesture(); selectedID = nil
         selection = nil
         dragOrigin = nil
@@ -207,6 +303,16 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
+            if let areaResize {
+                selection = areaResize.selection; toolbar.frame = areaResize.toolbar; annotationOffset = areaResize.offset
+                self.areaResize = nil
+                window?.invalidateCursorRects(for: self); changed(); return
+            }
+            if let areaDrag {
+                selection = areaDrag.selection; toolbar.frame = areaDrag.toolbar
+                self.areaDrag = nil
+                window?.invalidateCursorRects(for: self); changed(); return
+            }
             if annotationOrigin != nil { cancelGesture(); changed(); return }
             if dragOrigin != nil { dragOrigin = nil; selection = nil; changed(); return }
             if selectedID != nil { selectedID = nil; changed(); return }
@@ -234,20 +340,50 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     func prepareForExport() -> Bool {
-        guard annotationOrigin == nil, dragOrigin == nil else { return false }
+        guard annotationOrigin == nil, dragOrigin == nil, areaDrag == nil, areaResize == nil else { return false }
         commitText(); selectedID = nil; changed()
         return true
+    }
+
+    private func resizeSelection(with event: NSEvent) {
+        guard let areaResize, !isExporting else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let original = areaResize.selection
+        let right = min(bounds.maxX, max(original.minX + min(16, original.width), original.maxX + point.x - areaResize.start.x))
+        let bottom = max(bounds.minY, min(original.maxY - min(16, original.height), original.minY + point.y - areaResize.start.y))
+        let rectangle = CGRect(x: original.minX, y: bottom, width: right - original.minX, height: original.maxY - bottom)
+        selection = rectangle
+        annotationOffset = CGPoint(x: areaResize.offset.x, y: areaResize.offset.y + original.minY - bottom)
+        toolbar.frame = SelectionGeometry.resizedToolbar(original: areaResize.toolbar, from: original,
+                                                         to: rectangle, bounds: toolbar.movementBounds ?? bounds)
+        window?.invalidateCursorRects(for: self); needsDisplay = true
+    }
+
+    private func moveSelection(with event: NSEvent) {
+        guard let areaDrag, !isExporting else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let original = areaDrag.selection
+        let origin = CGPoint(x: min(max(original.minX + point.x - areaDrag.start.x, bounds.minX), bounds.maxX - original.width),
+                             y: min(max(original.minY + point.y - areaDrag.start.y, bounds.minY), bounds.maxY - original.height))
+        selection = CGRect(origin: origin, size: original.size)
+        let limit = toolbar.movementBounds ?? bounds
+        toolbar.frame.origin = CGPoint(
+            x: min(max(areaDrag.toolbar.minX + origin.x - original.minX, limit.minX), max(limit.minX, limit.maxX - toolbar.frame.width)),
+            y: min(max(areaDrag.toolbar.minY + origin.y - original.minY, limit.minY), max(limit.minY, limit.maxY - toolbar.frame.height)))
+        window?.invalidateCursorRects(for: self)
+        NSCursor.closedHand.set(); needsDisplay = true
     }
 
     private func updateAnnotation(_ event: NSEvent) {
         guard !isExporting, let selection, let origin = annotationOrigin else { return }
         let previousBounds = draft?.bounds
         let position = convert(event.locationInWindow, from: nil)
-        var point = CGPoint(x: position.x - selection.minX, y: position.y - selection.minY)
+        var point = CGPoint(x: position.x - contentOrigin.x, y: position.y - contentOrigin.y)
         if let original = moveOriginal {
             draft = original.moved(by: CGPoint(x: point.x - origin.x, y: point.y - origin.y))
         } else if var annotation = draft {
-            point = SelectionGeometry.clamped(point, to: CGRect(origin: .zero, size: selection.size))
+            point = SelectionGeometry.clamped(point, to: CGRect(x: -annotationOffset.x, y: -annotationOffset.y,
+                                                               width: selection.width, height: selection.height))
             if annotation.tool == .pen {
                 if annotation.points.last != point { annotation.points.append(point) }
             } else { annotation.points = [origin, point] }
@@ -256,7 +392,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if let draft {
             let margin = max(20, draft.style.width * 4)
             let dirty = (previousBounds ?? draft.bounds).union(draft.bounds).insetBy(dx: -margin, dy: -margin)
-                .offsetBy(dx: selection.minX, dy: selection.minY)
+                .offsetBy(dx: contentOrigin.x, dy: contentOrigin.y)
             setNeedsDisplay(dirty.intersection(selection.insetBy(dx: -1, dy: -1)))
         }
     }
@@ -273,7 +409,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             selected.style = newStyle
             if selected.tool == .text {
                 let top = selected.textRect.maxY
-                let height = min(top, AnnotationRenderer.textHeight(selected.text, width: selected.textRect.width, style: newStyle))
+                let height = min(top + annotationOffset.y, AnnotationRenderer.textHeight(selected.text, width: selected.textRect.width, style: newStyle))
                 selected.textRect.origin.y = top - height
                 selected.textRect.size.height = height
             }
@@ -293,7 +429,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private func beginText(_ annotation: Annotation) {
         guard let selection, annotation.textRect.width > 0, annotation.textRect.height > 0 else { return }
         editingText = annotation
-        let editor = AnnotationTextEditor(frame: annotation.textRect.offsetBy(dx: selection.minX, dy: selection.minY))
+        let editor = AnnotationTextEditor(frame: annotation.textRect.offsetBy(dx: contentOrigin.x, dy: contentOrigin.y))
         editor.isRichText = false; editor.drawsBackground = false; editor.allowsUndo = true
         editor.textContainerInset = .zero; editor.textContainer?.lineFragmentPadding = 0
         editor.textContainer?.widthTracksTextView = true
@@ -315,16 +451,16 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
               let layout = editor.layoutManager, let container = editor.textContainer else { return }
         container.containerSize = CGSize(width: annotation.textRect.width, height: 10000)
         layout.ensureLayout(for: container)
-        let height = min(annotation.textRect.maxY, max(annotation.style.fontSize * 1.4, layout.usedRect(for: container).height))
-        editor.frame = CGRect(x: annotation.textRect.minX + selection.minX,
-                              y: annotation.textRect.maxY + selection.minY - height,
+        let height = min(annotation.textRect.maxY + annotationOffset.y, max(annotation.style.fontSize * 1.4, layout.usedRect(for: container).height))
+        editor.frame = CGRect(x: annotation.textRect.minX + contentOrigin.x,
+                              y: annotation.textRect.maxY + contentOrigin.y - height,
                               width: annotation.textRect.width, height: height)
     }
 
     private func commitText() {
         guard let editor = textEditor, var annotation = editingText, let selection else { return }
         annotation.text = editor.string
-        annotation.textRect = editor.frame.offsetBy(dx: -selection.minX, dy: -selection.minY)
+        annotation.textRect = editor.frame.offsetBy(dx: -contentOrigin.x, dy: -contentOrigin.y)
         document.commit(annotation)
         closeTextEditor(); changed()
     }

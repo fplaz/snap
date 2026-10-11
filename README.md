@@ -2,7 +2,7 @@
 
 A native macOS menu bar screenshot app. Press **⌘⇧7**, drag a rectangle, then copy the image or save a PNG.
 
-Snap includes capture, selection, annotations, clipboard output, and local save. Google Drive uploads and screenshot history are a later milestone.
+Snap includes capture, selection, annotations, clipboard output, and local save. Google Drive upload and screenshot history are implemented locally; The local OAuth configuration and signed development build are ready; real-account acceptance testing remains pending. See [Google setup](docs/google-setup.md).
 
 ## Requirements
 
@@ -10,13 +10,13 @@ Snap includes capture, selection, annotations, clipboard output, and local save.
 - Full Xcode, with its license accepted and first-run setup complete.
 - Screen Recording permission for Snap when taking the first screenshot.
 
-No packages or third-party dependencies are required.
+Xcode resolves pinned GoogleSignIn 9.0.0 (button UI), AppAuth 2.1.0, and GTMAppAuth 5.0.0 through Swift Package Manager. Local capture works without Google configuration.
 
 ## Run in Xcode
 
 Open `Snap.xcodeproj`, select the **Snap** scheme and **My Mac**, then Run. Snap appears in the menu bar with a viewfinder icon. It has no Dock icon.
 
-The bundle identifier is `cl.assetplan.snap`. App builds use **Apple Development** signing with team `94K9S6W37W` so Screen Recording permission can recognize the same app across rebuilds. The unit-test bundle uses ad-hoc signing. Production distribution signing and notarization are outside milestone 1.
+The bundle identifier is `cl.fplaz.snap`. App builds use **Apple Development** signing with team `94K9S6W37W` so Screen Recording permission can recognize the same app across rebuilds. The unit-test bundle uses ad-hoc signing. Production distribution signing and notarization are outside milestone 1.
 
 ### Keep Screen Recording permission across builds
 
@@ -59,7 +59,7 @@ Use the same built app location across launches. Changing its identity or signin
 ## Capture
 
 1. Press **⌘⇧7**, or choose **Take Screenshot** from the menu bar.
-2. Allow Screen Recording access when requested. Enable Snap in **System Settings → Privacy & Security → Screen Recording** (the label may include System Audio on newer macOS). Relaunch Snap if macOS requests it.
+2. If Screen Recording access is missing, Snap shows **Allow Screen Recording** and **Not Now**. Allow calls the native macOS request API on every confirmed attempt, including after access is removed. Follow the native dialog to enable Snap. Reopen Snap if needed, then try the screenshot shortcut again.
 3. Drag a rectangular area. Each display is frozen before the overlay appears; the selected area is undimmed.
 4. Click **Copy** (⌘C), **Save** (⌘S), or **Cancel** (Escape).
 
@@ -79,10 +79,42 @@ Snap captures only when invoked. It does not continuously record or upload scree
 
 If another app owns ⌘⇧7, Snap shows a shortcut warning in its menu; **Take Screenshot** still works. Shortcut customization is deferred.
 
+For isolated cloud validation before provisioning is configured, build/test without signing into a separate product directory:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+  -project Snap.xcodeproj -scheme Snap -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/cloud-validation \
+  CONFIGURATION_BUILD_DIR="$PWD/.build/cloud-validation-products" \
+  CODE_SIGNING_ALLOWED=NO test
+```
+
+The unhosted test target compiles the app sources without building a second Snap.app. Keep test DerivedData separate from the signed app build so testing cannot replace or unregister it. Use the normally signed bundle for real capture and Google login.
+
+## Google Drive and history
+
+For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.1.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
+
+Releases use the retained **Snap Local Distribution** self-signed identity from your login Keychain. Preserve and securely back up that identity and its private key for updates. `SNAP_SIGNING_IDENTITY` can override the identity; the build never silently falls back to ad-hoc signing. Local trust applies only to the creator's code-signing policy; no certificate or private key needs to be installed on users' Macs. This does not provide Developer ID trust or notarization: users must approve the downloaded app through Privacy & Security. The Google OAuth project must be configured for production before accepting arbitrary users.
+
+Sign in from Snap's menu, then use the toolbar's **Upload & Copy Link** icon. Uploads contain the same full-resolution PNG as Copy/Save and are placed in the private **Snap Screenshots** folder. Each uploaded screenshot is viewable by anyone with its link.
+
+Upload stages only the composed crop before closing the overlay and returning focus. Network work continues in the background. One upload can be pending for the connected account; other captures can still be copied or saved. **My Screenshots** shows uploaded images, pending failures, Retry, and Discard Local Copy. Discarding local staging does not delete files already uploaded to Drive.
+
+Retry uses the original file ID to avoid duplicates. A failed sharing request retries sharing, not PNG upload. Interrupted jobs persist locally and resume only on explicit Retry with their original account. Sign Out cancels network work, clears visible account/history state, and leaves uploaded files and their public links intact.
+
+After the capture overlay closes, a small panel appears at the top right of the active screen. An indeterminate loading bar runs while uploading/sharing, with Copy Link disabled until the viewing link is verified. Once ready, the panel shows the link, Copy Link, and Close; Copy Link dismisses the panel. Failed uploads offer Review Upload for the existing retry controls. The panel hides during new captures so it is not included in screenshots.
+
+The viewing link is copied automatically if your clipboard has not changed during upload; otherwise Snap shows **Link ready — Copy Link**. History refreshes sharing state before copying a link and never silently republishes a file whose public permission was removed in Drive.
+
+Google sign-in opens the Mac’s default browser through NSWorkspace. AppAuth manages the authorization-code flow, random state, PKCE, and token refresh; GTMAppAuth stores credentials in the macOS file-based Keychain using its supported configuration. The beta's credential item name is retained for continuity; older development builds using the data-protection Keychain require signing in again. Cancel Sign In stops an abandoned flow, and unanswered sign-in attempts expire after ten minutes. Pending PNGs and their job metadata use app-private Application Support storage; successful/discarded jobs are cleaned up. Whole frozen displays are never staged. Google API access uses `drive.file`, not unrestricted Drive access.
+
+Complete [Google setup](docs/google-setup.md) before real-account testing. The signed milestone-three build is available at `.build/xcode/Build/Products/Debug/Snap.app`; real sign-in/upload testing remains pending.
+
 ## Verification
 
-The XCTest target is unhosted and compiles the app's geometry, session, and export sources directly. It does not launch the app, take screenshots, or alter the real clipboard. It verifies crop coordinates and pixels, PNG encoding, and session transitions.
+The XCTest target is unhosted and compiles app capture, cloud, and UI sources directly. Cloud tests use stubbed HTTP, temporary storage, and injected clipboard behavior; they do not sign in or mutate real Drive/Keychain. It does not launch the app, take screenshots, or alter the real clipboard. It verifies crop coordinates and pixels, PNG encoding, and session transitions.
 
 Desktop behavior needs a real macOS check: global shortcut, screen permission, overlays, fullscreen apps, multiple monitors, clipboard interoperability, save panel, and focus restoration. See `docs/verification/milestone-one.md` for observed results and remaining checks.
 
-Local Instruments signposts in the `cl.assetplan.snap` / `Capture` category record preparation-to-overlay scheduling and release-to-toolbar scheduling. These are useful attribution timings; they do not alone prove when a frame was actually displayed.
+Local Instruments signposts in the `cl.fplaz.snap` / `Capture` category record preparation-to-overlay scheduling and release-to-toolbar scheduling. These are useful attribution timings; they do not alone prove when a frame was actually displayed.

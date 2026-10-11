@@ -40,10 +40,23 @@ struct CaptureSession {
         return true
     }
 
+    mutating func moveSelection(to rectangle: CGRect) -> Bool {
+        guard phase == .ready, let selection, rectangle.size == selection.rectangle.size else { return false }
+        self.selection = Selection(displayID: selection.displayID, rectangle: rectangle)
+        return true
+    }
+
     mutating func beginExport() -> UUID? {
         guard phase == .ready, selection != nil else { return nil }
         phase = .exporting
         return id
+    }
+
+    mutating func resizeSelection(to rectangle: CGRect) -> Bool {
+        guard phase == .ready, let selection, rectangle.width > 0, rectangle.height > 0,
+              rectangle.minX == selection.rectangle.minX, rectangle.maxY == selection.rectangle.maxY else { return false }
+        self.selection = Selection(displayID: selection.displayID, rectangle: rectangle)
+        return true
     }
 
     mutating func resumeAfterExport(_ id: UUID) -> Bool {
