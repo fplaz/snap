@@ -58,6 +58,8 @@ Use the same built app location across launches. Changing its identity or signin
 
 ## Capture
 
+On first launch, a five-step tutorial covers capture, moving and resizing the area, Google sign-in and uploads, annotation tools, and keyboard shortcuts. Skip or close it at any time; it appears automatically only once per macOS user, including for existing users opening this update. Reopen it from **Snap → Tutorial…**. Starting a capture hides the tutorial.
+
 1. Press **⌘⇧7**, or choose **Take Screenshot** from the menu bar.
 2. If Screen Recording access is missing, Snap shows **Allow Screen Recording** and **Not Now**. Allow calls the native macOS request API on every confirmed attempt, including after access is removed. Follow the native dialog to enable Snap. Reopen Snap if needed, then try the screenshot shortcut again.
 3. Drag a rectangular area. Each display is frozen before the overlay appears; the selected area is undimmed.
@@ -70,6 +72,8 @@ After selection, drawing keeps the crop fixed. Use **Clear Annotations** to imme
 Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, or **Text** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.
+
+After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, and Text. These shortcuts leave normal text input available while editing an annotation.
 
 Text supports multiple lines. Return inserts a newline; **⌘Return** or clicking outside commits the edit. Escape cancels the current text edit and restores its previous value. Native text copy and undo remain available while typing. Toolbar Copy/Save commits pending text before exporting.
 
@@ -93,7 +97,7 @@ The unhosted test target compiles the app sources without building a second Snap
 
 ## Google Drive and history
 
-For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.1.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
+For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.2.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
 
 Releases use the retained **Snap Local Distribution** self-signed identity from your login Keychain. Preserve and securely back up that identity and its private key for updates. `SNAP_SIGNING_IDENTITY` can override the identity; the build never silently falls back to ad-hoc signing. Local trust applies only to the creator's code-signing policy; no certificate or private key needs to be installed on users' Macs. This does not provide Developer ID trust or notarization: users must approve the downloaded app through Privacy & Security. The Google OAuth project must be configured for production before accepting arbitrary users.
 

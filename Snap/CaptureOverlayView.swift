@@ -10,6 +10,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     let toolbar = CaptureToolbar()
     let document: AnnotationDocument
     private var tool: AnnotationTool = .rectangle
+    private var toolBeforeSpace: AnnotationTool?
     private var style = AnnotationStyle()
     private var selectedID: UUID?
     private var draft: Annotation?
@@ -36,7 +37,10 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     var onSave: (() -> Void)?
     var onStartOver: (() -> Void)?
     var isExporting = false {
-        didSet { toolbar.setExporting(isExporting) }
+        didSet {
+            if isExporting { restoreTemporaryTool() }
+            toolbar.setExporting(isExporting)
+        }
     }
 
     init(snapshot: DisplaySnapshot, document: AnnotationDocument) {
@@ -47,10 +51,9 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         toolbar.isHidden = true
         addSubview(toolbar)
         toolbar.onTool = { [weak self] tool in
-            guard let self else { return }
-            self.commitText(); self.cancelGesture(); self.selectedID = nil; self.tool = tool; self.changed()
-            self.window?.invalidateCursorRects(for: self)
+            self?.changeTool(tool)
         }
+        toolbar.setTool(tool)
         toolbar.onStyle = { [weak self] style in self?.changeStyle(style) }
         toolbar.onUndo = { [weak self] in self?.undoAnnotation() }
         toolbar.onRedo = { [weak self] in self?.redoAnnotation() }
@@ -292,6 +295,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     func clearSelection() {
+        restoreTemporaryTool()
         areaResize = nil; annotationOffset = .zero
         areaDrag = nil
         cancelText(); cancelGesture(); selectedID = nil
@@ -302,6 +306,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
+        if handleToolShortcut(event) { return }
         if event.keyCode == 53 {
             if let areaResize {
                 selection = areaResize.selection; toolbar.frame = areaResize.toolbar; annotationOffset = areaResize.offset
@@ -322,6 +327,65 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             document.delete(selectedID); self.selectedID = nil; changed(); return
         }
         super.keyDown(with: event)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if handleToolShortcut(event) { return }
+        super.keyUp(with: event)
+    }
+
+    // Called by the panel too, so toolbar focus does not swallow these shortcuts.
+    func handleToolShortcut(_ event: NSEvent) -> Bool {
+        if event.type == .keyUp, event.keyCode == 49, toolBeforeSpace != nil {
+            restoreTemporaryTool()
+            return true
+        }
+        guard event.type == .keyDown, selection != nil, dragOrigin == nil,
+              !isExporting, textEditor == nil else { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        guard modifiers.isEmpty else { return false }
+        switch event.keyCode {
+        case 49:
+            if !event.isARepeat, toolBeforeSpace == nil {
+                cancelGesture()
+                toolBeforeSpace = tool
+                updateTool(.select)
+            }
+            return true
+        case 48:
+            if !event.isARepeat {
+                let tools = AnnotationTool.allCases
+                let index = tools.firstIndex(of: toolBeforeSpace ?? tool)!
+                changeTool(tools[(index + 1) % tools.count])
+            }
+            return true
+        default: return false
+        }
+    }
+
+    func restoreTemporaryTool() {
+        guard let previous = toolBeforeSpace else { return }
+        toolBeforeSpace = nil
+        updateTool(previous)
+    }
+
+    private func changeTool(_ newTool: AnnotationTool) {
+        guard !isExporting else { return }
+        commitText(); cancelGesture(); selectedID = nil
+        if toolBeforeSpace != nil {
+            toolBeforeSpace = newTool
+            updateTool(.select)
+        } else {
+            updateTool(newTool)
+        }
+    }
+
+    private func updateTool(_ newTool: AnnotationTool) {
+        tool = newTool
+        toolbar.setTool(newTool)
+        changed()
+        window?.invalidateCursorRects(for: self)
+        toolCursor.set()
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -428,6 +492,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
 
     private func beginText(_ annotation: Annotation) {
         guard let selection, annotation.textRect.width > 0, annotation.textRect.height > 0 else { return }
+        restoreTemporaryTool()
         editingText = annotation
         let editor = AnnotationTextEditor(frame: annotation.textRect.offsetBy(dx: contentOrigin.x, dy: contentOrigin.y))
         editor.isRichText = false; editor.drawsBackground = false; editor.allowsUndo = true

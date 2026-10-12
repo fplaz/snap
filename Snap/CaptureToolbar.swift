@@ -213,9 +213,13 @@ final class CaptureToolbar: NSView {
 
     @objc private func toolChanged() {
         let selected = AnnotationTool.allCases[tool.indexOfSelectedItem]
-        width.isHidden = selected == .text; fontSize.isHidden = selected != .text
-        tool.toolTip = selected.rawValue
+        setTool(selected)
         onTool?(selected)
+    }
+    func setTool(_ selected: AnnotationTool) {
+        tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
+        width.isHidden = selected == .text; fontSize.isHidden = selected != .text
+        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Hold Space: Select"
     }
     @objc private func styleChanged() {
         onStyle?(AnnotationStyle(color: AnnotationColor.allCases[color.indexOfSelectedItem],

@@ -289,6 +289,123 @@ final class AnnotationInteractionTests: XCTestCase {
         XCTAssertTrue(document.annotations.isEmpty)
     }
 
+    @MainActor
+    func testSpaceTemporarilySelectsAndRestoresEveryToolDespiteKeyRepeat() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let popup = try toolPopup(view)
+        for tool in AnnotationTool.allCases {
+            view.toolbar.onTool?(tool)
+            view.keyDown(with: key(49))
+            XCTAssertEqual(popup.indexOfSelectedItem, 0)
+            view.keyDown(with: key(49, repeatKey: true))
+            view.keyUp(with: key(49, type: .keyUp, modifiers: .shift))
+            XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: tool))
+        }
+    }
+
+    @MainActor
+    func testSpaceSelectsAndMovesAnnotationThenRestoresDrawingTool() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        let annotation = Annotation(tool: .line, points: [CGPoint(x: 30, y: 30), CGPoint(x: 80, y: 80)])
+        document.commit(annotation)
+        view.keyDown(with: key(49))
+        view.mouseDown(with: mouse(.leftMouseDown, x: 70, y: 70))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: 90, y: 80))
+        view.keyUp(with: key(49, type: .keyUp))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 90, y: 80))
+        XCTAssertEqual(document.annotations, [annotation.moved(by: CGPoint(x: 20, y: 10))])
+        view.mouseDown(with: mouse(.leftMouseDown, x: 150, y: 150))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 200, y: 200))
+        XCTAssertEqual(document.annotations.last?.tool, .rectangle)
+    }
+
+    @MainActor
+    func testTabCyclesToolbarOrderAndWrapsWithoutRepeating() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let popup = try toolPopup(view)
+        view.toolbar.onTool?(.select)
+        for index in 1...AnnotationTool.allCases.count {
+            view.keyDown(with: key(48))
+            view.keyDown(with: key(48, repeatKey: true))
+            XCTAssertEqual(popup.indexOfSelectedItem, index % AnnotationTool.allCases.count)
+        }
+        view.toolbar.onTool?(.ellipse)
+        view.keyDown(with: key(48))
+        let menus = view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+        XCTAssertFalse(try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Text size" }).isHidden)
+        XCTAssertTrue(try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Line width" }).isHidden)
+    }
+
+    @MainActor
+    func testTabWhileSpaceHeldChangesToolRestoredOnRelease() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.keyDown(with: key(49))
+        view.keyDown(with: key(48))
+        XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, 0)
+        view.keyUp(with: key(49, type: .keyUp))
+        XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+    }
+
+    @MainActor
+    func testShortcutsIgnoreTextEditingExportAndUnfinishedSelection() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.toolbar.onTool?(.text)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 50, y: 200))
+        XCTAssertFalse(view.handleToolShortcut(key(49)))
+        XCTAssertFalse(view.handleToolShortcut(key(48)))
+        let editor = try XCTUnwrap(view.subviews.compactMap { $0 as? AnnotationTextEditor }.first)
+        editor.insertText("Two words", replacementRange: NSRange(location: 0, length: 0))
+        XCTAssertEqual(editor.string, "Two words")
+        view.clearSelection()
+        XCTAssertFalse(view.handleToolShortcut(key(49)))
+        XCTAssertFalse(view.handleToolShortcut(key(48)))
+        view.mouseDown(with: mouse(.leftMouseDown, x: 20, y: 20))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: 350, y: 260))
+        XCTAssertFalse(view.handleToolShortcut(key(49)))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 350, y: 260))
+        view.isExporting = true
+        XCTAssertFalse(view.handleToolShortcut(key(49)))
+        XCTAssertFalse(view.handleToolShortcut(key(48)))
+    }
+
+    @MainActor
+    func testPanelRoutesShortcutsWithToolbarFocusAndRestoresOnFocusLoss() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let panel = CaptureOverlayPanel(frame: view.frame)
+        defer { panel.close() }
+        panel.contentView = view
+        let popup = try toolPopup(view)
+        panel.makeFirstResponder(popup)
+        panel.sendEvent(key(48))
+        XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+        panel.sendEvent(key(49))
+        XCTAssertEqual(popup.indexOfSelectedItem, 0)
+        panel.resignKey()
+        XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+        panel.sendEvent(key(49, type: .keyUp))
+        XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+    }
+
+    @MainActor
+    private func toolPopup(_ view: CaptureOverlayView) throws -> NSPopUpButton {
+        try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+            .first { $0.accessibilityLabel() == "Drawing tool" })
+    }
+
+    private func key(_ code: UInt16, type: NSEvent.EventType = .keyDown,
+                     repeatKey: Bool = false, modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+        let characters = code == 49 ? " " : "\t"
+        return NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                               windowNumber: 0, context: nil, characters: characters,
+                               charactersIgnoringModifiers: characters, isARepeat: repeatKey, keyCode: code)!
+    }
+
     private func mouse(_ type: NSEvent.EventType, x: CGFloat, y: CGFloat, clicks: Int = 1) -> NSEvent {
         NSEvent.mouseEvent(with: type, location: CGPoint(x: x, y: y), modifierFlags: [], timestamp: 0,
                           windowNumber: 0, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1)!

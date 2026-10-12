@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var uploadPanel: UploadProgressPanel?
     private var statusBar: StatusBarController?
     private var capture: CaptureCoordinator?
+    private var tutorial: TutorialWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -45,13 +46,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         uploads.onUploaded = { [weak history] in history?.refresh() }
         self.account = account; self.uploads = uploads; self.history = history; self.historyWindow = historyWindow
         let coordinator = CaptureCoordinator(uploads: uploads)
-        coordinator.onCaptureStarted = { [weak uploadPanel] in uploadPanel?.captureStarted() }
+        let tutorial = TutorialWindow()
+        self.tutorial = tutorial
+        coordinator.onCaptureStarted = { [weak uploadPanel, weak tutorial] in
+            tutorial?.hide()
+            uploadPanel?.captureStarted()
+        }
         coordinator.onCaptureEnded = { [weak uploadPanel] in uploadPanel?.captureEnded() }
         capture = coordinator
-        statusBar = StatusBarController(capture: coordinator, account: account, uploads: uploads, historyWindow: historyWindow)
+        statusBar = StatusBarController(capture: coordinator, account: account, uploads: uploads,
+                                        historyWindow: historyWindow, tutorial: tutorial)
         NSAppleEventManager.shared().setEventHandler(account, andSelector: #selector(AccountController.handleGetURL(_:reply:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         account.restore()
+        tutorial.showOnFirstLaunch()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

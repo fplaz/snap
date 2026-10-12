@@ -8,11 +8,14 @@ final class StatusBarController: NSObject {
     private let account: AccountController
     private let uploads: UploadCoordinator
     private let historyWindow: ScreenshotHistoryWindow
+    private let tutorial: TutorialWindow
     private var observers: [AnyCancellable] = []
     private var shortcut: GlobalShortcut?
 
-    init(capture: CaptureCoordinator, account: AccountController, uploads: UploadCoordinator, historyWindow: ScreenshotHistoryWindow) {
+    init(capture: CaptureCoordinator, account: AccountController, uploads: UploadCoordinator,
+         historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow) {
         self.capture = capture; self.account = account; self.uploads = uploads; self.historyWindow = historyWindow
+        self.tutorial = tutorial
         super.init()
         if let button = item.button {
             button.image = Self.menuBarIcon()
@@ -91,6 +94,9 @@ final class StatusBarController: NSObject {
         link.target = self; link.isEnabled = uploads.latestLink != nil
         menu.addItem(link)
         menu.addItem(.separator())
+        let tutorial = NSMenuItem(title: "Tutorial…", action: #selector(showTutorial), keyEquivalent: "")
+        tutorial.target = self
+        menu.addItem(tutorial)
         let quit = NSMenuItem(title: "Quit Snap", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
@@ -105,6 +111,11 @@ final class StatusBarController: NSObject {
     @objc private func showHistory() {
         capture.cancel()
         DispatchQueue.main.async { [weak self] in self?.historyWindow.show() }
+    }
+    @objc private func showTutorial() {
+        capture.cancel()
+        historyWindow.hide()
+        DispatchQueue.main.async { [weak self] in self?.tutorial.show() }
     }
     @objc private func signOut() { account.signOut() }
     @objc private func copyLink() { uploads.copyLatestLink() }
