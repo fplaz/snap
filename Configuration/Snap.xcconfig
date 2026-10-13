@@ -2,3 +2,8 @@
 GOOGLE_CLIENT_ID =
 GOOGLE_REVERSED_CLIENT_ID = snap-unconfigured
 #include? "Google.local.xcconfig"
+
+// Update configuration is public. Keep the private signing key in the Keychain.
+SNAP_UPDATE_FEED_URL =
+SNAP_UPDATE_PUBLIC_KEY =
+#include? "Updates.xcconfig"

@@ -1,0 +1,4 @@
+// Public update configuration; the private key stays in the login Keychain.
+// GitHub Pages serves the stable feed; GitHub Releases hosts versioned DMGs.
+SNAP_UPDATE_FEED_URL = https:/$()/fplaz.github.io/snap/appcast.xml
+SNAP_UPDATE_PUBLIC_KEY = knOt9jCFitj09eJ3vmj2O3C64lX/IKIPDUAvoVEUU4k=

@@ -8,6 +8,7 @@ import Combine
 final class CaptureCoordinator {
     var onCaptureStarted: (() -> Void)?
     var onCaptureEnded: (() -> Void)?
+    var isActive: Bool { session.phase != .idle }
     private let uploads: UploadCoordinator?
     private var uploadObservation: AnyCancellable?
     private var session = CaptureSession()

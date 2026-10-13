@@ -97,7 +97,7 @@ The unhosted test target compiles the app sources without building a second Snap
 
 ## Google Drive and history
 
-For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.2.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
+For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.3.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
 
 Releases use the retained **Snap Local Distribution** self-signed identity from your login Keychain. Preserve and securely back up that identity and its private key for updates. `SNAP_SIGNING_IDENTITY` can override the identity; the build never silently falls back to ad-hoc signing. Local trust applies only to the creator's code-signing policy; no certificate or private key needs to be installed on users' Macs. This does not provide Developer ID trust or notarization: users must approve the downloaded app through Privacy & Security. The Google OAuth project must be configured for production before accepting arbitrary users.
 
@@ -114,6 +114,12 @@ The viewing link is copied automatically if your clipboard has not changed durin
 Google sign-in opens the Mac’s default browser through NSWorkspace. AppAuth manages the authorization-code flow, random state, PKCE, and token refresh; GTMAppAuth stores credentials in the macOS file-based Keychain using its supported configuration. The beta's credential item name is retained for continuity; older development builds using the data-protection Keychain require signing in again. Cancel Sign In stops an abandoned flow, and unanswered sign-in attempts expire after ten minutes. Pending PNGs and their job metadata use app-private Application Support storage; successful/discarded jobs are cleaned up. Whole frozen displays are never staged. Google API access uses `drive.file`, not unrestricted Drive access.
 
 Complete [Google setup](docs/google-setup.md) before real-account testing. The signed milestone-three build is available at `.build/xcode/Build/Products/Debug/Snap.app`; real sign-in/upload testing remains pending.
+
+## App updates
+
+Snap checks for updates daily using Sparkle and includes **Check for Updates…** in its menu. Users approve installation; restarting for an update waits for active captures and uploads. Signed feeds and DMGs can be hosted as GitHub Release assets without an update server or Apple membership. The feed becomes available when an updater-enabled release is published. Existing users must install that first release manually.
+
+See [Releasing Snap updates](docs/updates.md) for signing-key setup, build commands, hosting, and publishing.
 
 ## Verification
 

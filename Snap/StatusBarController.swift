@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import Sparkle
 
 @MainActor
 final class StatusBarController: NSObject {
@@ -9,13 +10,15 @@ final class StatusBarController: NSObject {
     private let uploads: UploadCoordinator
     private let historyWindow: ScreenshotHistoryWindow
     private let tutorial: TutorialWindow
+    private let updater: SPUStandardUpdaterController
     private var observers: [AnyCancellable] = []
     private var shortcut: GlobalShortcut?
 
     init(capture: CaptureCoordinator, account: AccountController, uploads: UploadCoordinator,
-         historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow) {
+         historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow, updater: SPUStandardUpdaterController) {
         self.capture = capture; self.account = account; self.uploads = uploads; self.historyWindow = historyWindow
         self.tutorial = tutorial
+        self.updater = updater
         super.init()
         if let button = item.button {
             button.image = Self.menuBarIcon()
@@ -27,6 +30,8 @@ final class StatusBarController: NSObject {
             observers.append(publisher.sink { [weak self] in DispatchQueue.main.async { self?.rebuildMenu() } })
         }
         observers.append(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.rebuildMenu() } })
+        observers.append(updater.updater.publisher(for: \.canCheckForUpdates)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.rebuildMenu() } })
         rebuildMenu()
     }
@@ -97,6 +102,10 @@ final class StatusBarController: NSObject {
         let tutorial = NSMenuItem(title: "Tutorial…", action: #selector(showTutorial), keyEquivalent: "")
         tutorial.target = self
         menu.addItem(tutorial)
+        let update = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        update.target = self
+        update.isEnabled = updater.updater.canCheckForUpdates
+        menu.addItem(update)
         let quit = NSMenuItem(title: "Quit Snap", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
@@ -118,6 +127,10 @@ final class StatusBarController: NSObject {
         DispatchQueue.main.async { [weak self] in self?.tutorial.show() }
     }
     @objc private func signOut() { account.signOut() }
+    @objc private func checkForUpdates() {
+        capture.cancel()
+        DispatchQueue.main.async { [weak self] in self?.updater.checkForUpdates(nil) }
+    }
     @objc private func copyLink() { uploads.copyLatestLink() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

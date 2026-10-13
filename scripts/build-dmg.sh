@@ -33,7 +33,6 @@ app="$products/Snap.app"
 # Validate the public OAuth configuration before creating an installer.
 client_id="$(/usr/libexec/PlistBuddy -c 'Print :GIDClientID' "$app/Contents/Info.plist")"
 [[ "$client_id" == *.apps.googleusercontent.com ]] || { echo 'Configure Configuration/Google.local.xcconfig first.' >&2; exit 1; }
-[[ ! -d "$app/Contents/Frameworks" ]] || { echo 'Embedded frameworks need an explicit nested-code signing step.' >&2; exit 1; }
 "$lsregister" -u "$app" || true
 rm -rf "$staging"
 mkdir -p "$staging"
@@ -41,7 +40,19 @@ ditto "$app" "$staging/Snap.app"
 # These unsigned build products must never compete with the signed development app.
 rm -rf "$app"
 rm -f "$staging/Snap.app/Contents/embedded.provisionprofile"
-codesign --force --sign "$identity" --options runtime --timestamp=none "$staging/Snap.app"
+# Sign embedded code from the inside out, retaining Sparkle helper entitlements.
+framework="$staging/Snap.app/Contents/Frameworks/Sparkle.framework"
+[[ -d "$framework" ]] || { echo 'Sparkle.framework is missing from the app.' >&2; exit 1; }
+while IFS= read -r -d '' nested; do
+    echo "Signing Sparkle helper: $(basename "$nested")"
+    codesign --force --sign "$identity" --options runtime --timestamp=none \
+        --preserve-metadata=entitlements "$nested"
+done < <(find "$framework" -depth \( \( -type d \( -name '*.xpc' -o -name '*.app' \) \) -o \( -type f -name Autoupdate \) \) -print0)
+echo 'Signing Sparkle framework (5 of 6 components).'
+codesign --force --sign "$identity" --options runtime --timestamp=none "$framework"
+echo 'Signing Snap (6 of 6 components).'
+codesign --force --sign "$identity" --options runtime --timestamp=none \
+    --entitlements "$repo_root/Snap/Distribution.entitlements" "$staging/Snap.app"
 codesign --verify --deep --strict "$staging/Snap.app"
 architectures="$(lipo -archs "$staging/Snap.app/Contents/MacOS/Snap")"
 [[ " $architectures " == *" arm64 "* && " $architectures " == *" x86_64 "* ]] || {

@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 
 @main
 @MainActor
@@ -12,7 +13,7 @@ enum SnapMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var account: AccountController?
     private var uploads: UploadCoordinator?
     private var history: ScreenshotHistoryController?
@@ -21,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
     private var capture: CaptureCoordinator?
     private var tutorial: TutorialWindow?
+    private var updater: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -54,8 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         coordinator.onCaptureEnded = { [weak uploadPanel] in uploadPanel?.captureEnded() }
         capture = coordinator
+        let updater = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
+        self.updater = updater
+        // Unconfigured developer builds keep local capture available without contacting a feed.
+        if let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+           let url = URL(string: feed), url.scheme == "https", url.host != nil,
+           let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
+           Data(base64Encoded: key)?.count == 32 {
+            updater.startUpdater()
+        }
         statusBar = StatusBarController(capture: coordinator, account: account, uploads: uploads,
-                                        historyWindow: historyWindow, tutorial: tutorial)
+                                        historyWindow: historyWindow, tutorial: tutorial, updater: updater)
         NSAppleEventManager.shared().setEventHandler(account, andSelector: #selector(AccountController.handleGetURL(_:reply:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         account.restore()
@@ -65,5 +76,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         capture?.cancel()
         uploads?.stop()
+    }
+
+    func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+                 untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        guard capture?.isActive == true || uploads?.isWorking == true else { return false }
+        // Finish the user's capture or upload before Sparkle quits and replaces Snap.
+        Task { @MainActor [weak self] in
+            while let self, self.capture?.isActive == true || self.uploads?.isWorking == true {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            installHandler()
+        }
+        return true
     }
 }

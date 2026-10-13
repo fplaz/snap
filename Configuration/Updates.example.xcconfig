@@ -1,0 +1,4 @@
+// Copy to Updates.xcconfig. Both values are public and may be committed.
+// The empty expansion prevents xcconfig from treating // as a comment.
+SNAP_UPDATE_FEED_URL = https:/$()/YOUR_HOST/appcast.xml
+SNAP_UPDATE_PUBLIC_KEY = YOUR_SPARKLE_PUBLIC_KEY

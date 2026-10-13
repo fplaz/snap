@@ -1,0 +1,43 @@
+name: Publish update feed
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download the latest stable release feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p _site
+          tag="$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)"
+          gh release download "$tag" --repo "$GH_REPO" --pattern appcast.xml --dir _site
+          test -s _site/appcast.xml
+          touch _site/.nojekyll
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload feed
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy feed
+        id: deployment
+        uses: actions/deploy-pages@v4
