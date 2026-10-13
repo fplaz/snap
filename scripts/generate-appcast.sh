@@ -4,6 +4,9 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 download_url="${1:?Usage: bash scripts/generate-appcast.sh https://HOST/downloads/ [release-notes.html]}"
 [[ "$download_url" == https://* ]] || { echo 'Downloads must use HTTPS.' >&2; exit 1; }
+[[ "$download_url" != *'/releases/latest/'* ]] || {
+    echo 'The feed must point to a specific release, not the latest-release redirect.' >&2; exit 1;
+}
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Snap/Info.plist)"
 dmg="$repo_root/.build/distribution/dist/Snap-$version.dmg"
 [[ -f "$dmg" ]] || { echo 'Build the DMG first.' >&2; exit 1; }
@@ -63,6 +66,15 @@ fi
 "$bin/generate_appcast" --account cl.fplaz.snap --versions "$build" \
     --maximum-deltas 0 --download-url-prefix "${download_url%/}/" \
     --embed-release-notes -o "$archives/appcast.xml" "$archives"
+# Keep versioned local archives for feed history, but publish one fixed-name asset
+# inside each version's release. Older feed entries keep their existing URLs.
+python3 "$repo_root/scripts/set-appcast-download.py" "$archives/appcast.xml" \
+    "$build" "${download_url%/}/Snap.dmg"
+"$bin/sign_update" --account cl.fplaz.snap "$archives/appcast.xml"
 "$bin/sign_update" --account cl.fplaz.snap --verify "$archives/appcast.xml"
-echo "Update files ready: $archives"
-echo 'Upload the DMG first, then appcast.xml at the SUFeedURL embedded in Snap.'
+publish="$repo_root/.build/distribution/publish/$version"
+mkdir -p "$publish"
+cp "$dmg" "$publish/Snap.dmg"
+cp "$archives/appcast.xml" "$publish/appcast.xml"
+echo "Release files ready: $publish"
+echo 'Upload Snap.dmg and appcast.xml to the matching version release.'
