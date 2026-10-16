@@ -25,6 +25,7 @@ struct AnnotationStyle: Equatable {
     var color: AnnotationColor = .red
     var width: CGFloat = 4
     var fontSize: CGFloat = 24
+    var blurRadius: CGFloat = 3.5
 }
 
 struct Annotation: Equatable, Identifiable {

@@ -3,6 +3,27 @@ import AppKit
 import ImageIO
 
 final class AnnotationRendererTests: XCTestCase {
+    func testDifferentBlurStrengthsRenderIndependently() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 120, height: 100, bitsPerComponent: 8,
+                                             bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 120, height: 100))
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 60, height: 100))
+        let light = Annotation(tool: .blur, points: [CGPoint(x: 20, y: 5), CGPoint(x: 100, y: 45)],
+                               style: AnnotationStyle(blurRadius: 1))
+        let strong = Annotation(tool: .blur, points: [CGPoint(x: 20, y: 55), CGPoint(x: 100, y: 95)],
+                                style: AnnotationStyle(blurRadius: 12))
+        let result = try ScreenshotExporter.compose(image: XCTUnwrap(context.makeImage()),
+                                                    selection: CGRect(x: 0, y: 0, width: 120, height: 100),
+                                                    logicalSize: CGSize(width: 120, height: 100), annotations: [light, strong])
+        let lightPixel = try pixel(result, x: 52, yFromBottom: 25)[0]
+        let strongPixel = try pixel(result, x: 52, yFromBottom: 75)[0]
+        XCTAssertLessThan(lightPixel, 10)
+        XCTAssertGreaterThan(strongPixel, lightPixel + 40)
+    }
+
     func testBlurChangesOnlyItsAreaAtNativeAndRetinaScale() throws {
         for scale in [1, 2] {
             let context = try XCTUnwrap(CGContext(data: nil, width: 160 * scale, height: 100 * scale,
@@ -15,7 +36,8 @@ final class AnnotationRendererTests: XCTestCase {
             context.fill(CGRect(x: 0, y: 0, width: 80 * scale, height: 100 * scale))
             let source = try XCTUnwrap(context.makeImage())
             let selection = CGRect(x: 20.25, y: 10.25, width: 100, height: 70)
-            let blur = Annotation(tool: .blur, points: [CGPoint(x: 40, y: 10), CGPoint(x: 80, y: 40)])
+            let blur = Annotation(tool: .blur, points: [CGPoint(x: 40, y: 10), CGPoint(x: 80, y: 40)],
+                                  style: AnnotationStyle(blurRadius: 12))
             let result = try ScreenshotExporter.compose(image: source, selection: selection,
                                                         logicalSize: CGSize(width: 160, height: 100), annotations: [blur])
             let original = try ScreenshotExporter.crop(image: source, selection: selection,

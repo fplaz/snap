@@ -24,6 +24,8 @@ final class CaptureToolbar: NSView {
     private let color = NSPopUpButton()
     private let width = NSPopUpButton()
     private let fontSize = NSPopUpButton()
+    private let blurLevel = NSSlider(value: 3.5, minValue: 1, maxValue: 12, target: nil, action: nil)
+    private let blurValue = NSTextField(labelWithString: "3.5")
     private var exporting = false
     private var canUndo = false
     private var canRedo = false
@@ -47,6 +49,20 @@ final class CaptureToolbar: NSView {
         popup(fontSize, labels: ["Small text", "Medium text", "Large text"],
               images: [12, 18, 24].map { textIcon($0) }, x: 126, label: "Text size", action: #selector(styleChanged))
         width.selectItem(at: 1); fontSize.selectItem(at: 1); fontSize.isHidden = true
+        blurLevel.frame = CGRect(x: 78, y: 16, width: 65, height: 20)
+        blurLevel.controlSize = .small
+        blurLevel.isContinuous = false
+        blurLevel.target = self; blurLevel.action = #selector(blurChanged)
+        blurLevel.setAccessibilityLabel("Blur strength")
+        blurValue.frame = CGRect(x: 144, y: 18, width: 28, height: 17)
+        blurValue.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        blurValue.textColor = NSColor(white: 0.88, alpha: 1)
+        blurValue.alignment = .center
+        blurValue.setAccessibilityLabel("Blur strength value")
+        editingControls.append(blurLevel)
+        addSubview(blurLevel); addSubview(blurValue)
+        setBlurLevel(3.5)
+        setContextualTool(.rectangle)
         undoButton = button("Undo", symbol: "arrow.uturn.backward", x: 184, action: #selector(undo))
         redoButton = button("Redo", symbol: "arrow.uturn.forward", x: 218, action: #selector(redo))
         undoButton.toolTip = "Undo (⌘Z)"; redoButton.toolTip = "Redo (⌘⇧Z)"
@@ -144,6 +160,7 @@ final class CaptureToolbar: NSView {
         color.selectItem(at: AnnotationColor.allCases.firstIndex(of: style.color) ?? 0)
         width.selectItem(at: [CGFloat(2), 4, 8].firstIndex(of: style.width) ?? 1)
         fontSize.selectItem(at: [CGFloat(16), 24, 32].firstIndex(of: style.fontSize) ?? 1)
+        setBlurLevel(style.blurRadius)
     }
 
     private func popup(_ control: NSPopUpButton, labels: [String], images: [NSImage?],
@@ -218,14 +235,28 @@ final class CaptureToolbar: NSView {
     }
     func setTool(_ selected: AnnotationTool) {
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
+        setContextualTool(selected)
+        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Hold Space: Select"
+    }
+    func setContextualTool(_ selected: AnnotationTool) {
         width.isHidden = selected == .text || selected == .blur; fontSize.isHidden = selected != .text
         color.isHidden = selected == .blur
-        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Hold Space: Select"
+        blurLevel.isHidden = selected != .blur; blurValue.isHidden = selected != .blur
+    }
+    private func setBlurLevel(_ value: CGFloat) {
+        blurLevel.doubleValue = Double(value)
+        blurValue.stringValue = String(format: "%.1f", blurLevel.doubleValue)
+        blurLevel.toolTip = "Blur strength: \(blurValue.stringValue) · 1 (light) to 12 (strong)"
+    }
+    @objc private func blurChanged() {
+        setBlurLevel(CGFloat((blurLevel.doubleValue * 2).rounded() / 2))
+        styleChanged()
     }
     @objc private func styleChanged() {
         onStyle?(AnnotationStyle(color: AnnotationColor.allCases[color.indexOfSelectedItem],
                                  width: [2, 4, 8][width.indexOfSelectedItem],
-                                 fontSize: [16, 24, 32][fontSize.indexOfSelectedItem]))
+                                 fontSize: [16, 24, 32][fontSize.indexOfSelectedItem],
+                                 blurRadius: CGFloat(blurLevel.doubleValue)))
     }
     @objc private func undo() { onUndo?() }
     @objc private func redo() { onRedo?() }

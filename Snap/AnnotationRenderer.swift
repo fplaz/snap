@@ -5,10 +5,10 @@ enum AnnotationRenderer {
     private static let blurContext = CIContext()
 
     // Use the full frozen display so crop boundaries do not create blur seams.
-    static func blurredScreenshot(_ image: CGImage, logicalSize: CGSize) throws -> NSImage {
+    static func blurredScreenshot(_ image: CGImage, logicalSize: CGSize, radius: CGFloat) throws -> NSImage {
         let source = CIImage(cgImage: image)
-        let radius = 12 * CGFloat(image.width) / logicalSize.width
-        let filtered = source.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
+        let pixelRadius = radius * CGFloat(image.width) / logicalSize.width
+        let filtered = source.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: pixelRadius])
         guard let result = blurContext.createCGImage(filtered, from: source.extent) else {
             throw CaptureError.encodingFailed
         }
@@ -24,15 +24,17 @@ enum AnnotationRenderer {
     }
 
     static func draw(_ annotations: [Annotation], in bounds: CGRect,
-                     blurredScreenshot: NSImage? = nil, screenshotRect: CGRect = .zero) {
+                     blurredScreenshot: (CGFloat) throws -> NSImage? = { _ in nil }, screenshotRect: CGRect = .zero) rethrows {
         NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
         NSBezierPath(rect: bounds).addClip()
-        // Blur the screenshot first; marks stay legible and overlapping areas use one strength.
+        // Blur the screenshot first; marks stay legible and overlapping areas do not compound.
         for annotation in annotations where annotation.tool == .blur && !annotation.isEmpty {
+            let blurred = try blurredScreenshot(annotation.style.blurRadius)
             NSGraphicsContext.saveGraphicsState()
             NSBezierPath(rect: annotation.bounds).addClip()
-            if let blurredScreenshot {
-                blurredScreenshot.draw(in: screenshotRect, from: .zero, operation: .copy, fraction: 1)
+            if let blurred {
+                blurred.draw(in: screenshotRect, from: .zero, operation: .copy, fraction: 1)
             } else {
                 // Never expose the original area if preview filtering is unavailable.
                 NSColor.black.setFill()
@@ -64,7 +66,6 @@ enum AnnotationRenderer {
             }
             path.stroke()
         }
-        NSGraphicsContext.restoreGraphicsState()
     }
 
     static func attributes(for style: AnnotationStyle) -> [NSAttributedString.Key: Any] {

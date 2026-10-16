@@ -3,6 +3,43 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testBlurStrengthIsStoredPerAreaAndSelectedEditsCanBeUndone() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        let slider = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSSlider }.first)
+        XCTAssertTrue(slider.isHidden)
+        view.toolbar.onTool?(.blur)
+        XCTAssertFalse(slider.isHidden)
+        XCTAssertEqual(slider.doubleValue, 3.5)
+        slider.doubleValue = 6
+        slider.sendAction(slider.action!, to: slider.target)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 160, y: 160))
+        let first = try XCTUnwrap(document.annotations.first)
+        XCTAssertEqual(first.style.blurRadius, 6)
+        slider.doubleValue = 2
+        slider.sendAction(slider.action!, to: slider.target)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 200, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 280, y: 160))
+        XCTAssertEqual(document.annotations.map(\.style.blurRadius), [6, 2])
+        view.toolbar.onTool?(.select)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 120, y: 120))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 120, y: 120))
+        XCTAssertFalse(slider.isHidden)
+        XCTAssertEqual(slider.doubleValue, 6)
+        slider.doubleValue = 9.2
+        slider.sendAction(slider.action!, to: slider.target)
+        XCTAssertEqual(document.annotations.map(\.style.blurRadius), [9, 2])
+        document.undo(); XCTAssertEqual(document.annotations.first, first)
+        document.redo(); XCTAssertEqual(document.annotations.first?.style.blurRadius, 9)
+        view.toolbar.setExporting(true)
+        XCTAssertFalse(slider.isEnabled)
+        view.toolbar.setExporting(false)
+        view.toolbar.onTool?(.pen)
+        XCTAssertTrue(slider.isHidden)
+    }
+
+    @MainActor
     func testBlurDragMoveUndoAndContextualControls() async throws {
         let (window, view, document) = try fixture()
         defer { window.close() }

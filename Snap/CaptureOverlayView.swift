@@ -4,8 +4,7 @@ import AppKit
 final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private let snapshot: DisplaySnapshot
     private let screenshot: NSImage
-    private lazy var blurredScreenshot: NSImage? = try? AnnotationRenderer.blurredScreenshot(
-        snapshot.image, logicalSize: snapshot.logicalSize)
+    private let blurredScreenshots = NSCache<NSNumber, NSImage>()
     private var dragOrigin: CGPoint?
     private(set) var selection: CGRect?
     private var tracking: NSTrackingArea?
@@ -48,6 +47,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     init(snapshot: DisplaySnapshot, document: AnnotationDocument) {
         self.snapshot = snapshot
         self.document = document
+        blurredScreenshots.countLimit = 3
         screenshot = NSImage(cgImage: snapshot.image, size: snapshot.logicalSize)
         super.init(frame: CGRect(origin: .zero, size: snapshot.logicalSize))
         toolbar.isHidden = true
@@ -153,7 +153,14 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             if let draft { annotations.append(draft) }
             AnnotationRenderer.draw(annotations, in: CGRect(x: -annotationOffset.x, y: -annotationOffset.y,
                                                             width: selection.width, height: selection.height),
-                                    blurredScreenshot: annotations.contains(where: { $0.tool == .blur }) ? blurredScreenshot : nil,
+                                    blurredScreenshot: { [self] radius in
+                                        let key = NSNumber(value: Double(radius))
+                                        if let cached = blurredScreenshots.object(forKey: key) { return cached }
+                                        guard let image = try? AnnotationRenderer.blurredScreenshot(
+                                            snapshot.image, logicalSize: snapshot.logicalSize, radius: radius) else { return nil }
+                                        blurredScreenshots.setObject(image, forKey: key)
+                                        return image
+                                    },
                                     screenshotRect: CGRect(x: -contentOrigin.x, y: -contentOrigin.y,
                                                            width: bounds.width, height: bounds.height))
             if let selected = annotations.first(where: { $0.id == selectedID }) {
@@ -469,6 +476,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private func cancelGesture() { draft = nil; moveOriginal = nil; annotationOrigin = nil }
     private func changed() {
         toolbar.updateHistory(canUndo: document.canUndo, canRedo: document.canRedo)
+        toolbar.setContextualTool(document.annotations.first(where: { $0.id == selectedID })?.tool ?? tool)
         needsDisplay = true
     }
     private func changeStyle(_ newStyle: AnnotationStyle) {
