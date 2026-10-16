@@ -35,7 +35,7 @@ final class CaptureToolbar: NSView {
         layer?.cornerRadius = 12
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat"]
+        let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat", "drop.halffull"]
         popup(tool, labels: AnnotationTool.allCases.map(\.rawValue), images: symbols.map { symbol($0) },
               x: 30, label: "Drawing tool", action: #selector(toolChanged))
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: .rectangle)!)
@@ -218,7 +218,8 @@ final class CaptureToolbar: NSView {
     }
     func setTool(_ selected: AnnotationTool) {
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
-        width.isHidden = selected == .text; fontSize.isHidden = selected != .text
+        width.isHidden = selected == .text || selected == .blur; fontSize.isHidden = selected != .text
+        color.isHidden = selected == .blur
         tool.toolTip = "\(selected.rawValue) · Tab: next tool · Hold Space: Select"
     }
     @objc private func styleChanged() {

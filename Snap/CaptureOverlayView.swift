@@ -4,6 +4,8 @@ import AppKit
 final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private let snapshot: DisplaySnapshot
     private let screenshot: NSImage
+    private lazy var blurredScreenshot: NSImage? = try? AnnotationRenderer.blurredScreenshot(
+        snapshot.image, logicalSize: snapshot.logicalSize)
     private var dragOrigin: CGPoint?
     private(set) var selection: CGRect?
     private var tracking: NSTrackingArea?
@@ -150,7 +152,10 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             var annotations = document.annotations.filter { $0.id != editingText?.id && $0.id != draft?.id }
             if let draft { annotations.append(draft) }
             AnnotationRenderer.draw(annotations, in: CGRect(x: -annotationOffset.x, y: -annotationOffset.y,
-                                                            width: selection.width, height: selection.height))
+                                                            width: selection.width, height: selection.height),
+                                    blurredScreenshot: annotations.contains(where: { $0.tool == .blur }) ? blurredScreenshot : nil,
+                                    screenshotRect: CGRect(x: -contentOrigin.x, y: -contentOrigin.y,
+                                                           width: bounds.width, height: bounds.height))
             if let selected = annotations.first(where: { $0.id == selectedID }) {
                 NSColor.white.setStroke()
                 let outline = NSBezierPath(rect: selected.bounds.insetBy(dx: -4, dy: -4))

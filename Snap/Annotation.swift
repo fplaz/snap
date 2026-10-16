@@ -3,6 +3,7 @@ import AppKit
 enum AnnotationTool: String, CaseIterable {
     case select = "Select", pen = "Pen", arrow = "Arrow", line = "Line"
     case rectangle = "Rectangle", ellipse = "Ellipse", text = "Text"
+    case blur = "Blur"
 }
 
 enum AnnotationColor: String, CaseIterable {
@@ -47,7 +48,7 @@ struct Annotation: Equatable, Identifiable {
         if tool == .text { return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard let first = points.first, let last = points.last else { return true }
         if tool == .pen { return !points.contains(where: { $0 != first }) }
-        if tool == .rectangle || tool == .ellipse { return bounds.width == 0 || bounds.height == 0 }
+        if tool == .rectangle || tool == .ellipse || tool == .blur { return bounds.width == 0 || bounds.height == 0 }
         return first == last
     }
 
@@ -61,6 +62,7 @@ struct Annotation: Equatable, Identifiable {
     func hitTest(_ point: CGPoint) -> Bool {
         let tolerance = max(5, style.width / 2 + 3)
         switch tool {
+        case .blur: return bounds.contains(point)
         case .text: return textRect.contains(point)
         case .rectangle:
             let r = bounds

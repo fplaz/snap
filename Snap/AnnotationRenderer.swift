@@ -1,6 +1,20 @@
 import AppKit
+import CoreImage
 
 enum AnnotationRenderer {
+    private static let blurContext = CIContext()
+
+    // Use the full frozen display so crop boundaries do not create blur seams.
+    static func blurredScreenshot(_ image: CGImage, logicalSize: CGSize) throws -> NSImage {
+        let source = CIImage(cgImage: image)
+        let radius = 12 * CGFloat(image.width) / logicalSize.width
+        let filtered = source.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
+        guard let result = blurContext.createCGImage(filtered, from: source.extent) else {
+            throw CaptureError.encodingFailed
+        }
+        return NSImage(cgImage: result, size: logicalSize)
+    }
+
     static func arrowhead(for annotation: Annotation) -> [CGPoint] {
         guard let start = annotation.points.first, let end = annotation.points.last else { return [] }
         let angle = atan2(end.y - start.y, end.x - start.x)
@@ -9,10 +23,24 @@ enum AnnotationRenderer {
                 end, CGPoint(x: end.x - length * cos(angle + .pi / 6), y: end.y - length * sin(angle + .pi / 6))]
     }
 
-    static func draw(_ annotations: [Annotation], in bounds: CGRect) {
+    static func draw(_ annotations: [Annotation], in bounds: CGRect,
+                     blurredScreenshot: NSImage? = nil, screenshotRect: CGRect = .zero) {
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: bounds).addClip()
-        for annotation in annotations {
+        // Blur the screenshot first; marks stay legible and overlapping areas use one strength.
+        for annotation in annotations where annotation.tool == .blur && !annotation.isEmpty {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: annotation.bounds).addClip()
+            if let blurredScreenshot {
+                blurredScreenshot.draw(in: screenshotRect, from: .zero, operation: .copy, fraction: 1)
+            } else {
+                // Never expose the original area if preview filtering is unavailable.
+                NSColor.black.setFill()
+                NSBezierPath(rect: annotation.bounds).fill()
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        for annotation in annotations where annotation.tool != .blur {
             if annotation.tool == .text { drawText(annotation); continue }
             let path = NSBezierPath()
             path.lineWidth = annotation.style.width

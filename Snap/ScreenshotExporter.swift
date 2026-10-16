@@ -22,9 +22,13 @@ enum ScreenshotExporter {
         context.translateBy(x: selection.minX * scaleX - pixels.minX,
                             y: selection.minY * scaleY - (CGFloat(image.height) - pixels.maxY))
         context.scaleBy(x: scaleX, y: scaleY)
+        let blurred = try annotations.contains(where: { $0.tool == .blur })
+            ? AnnotationRenderer.blurredScreenshot(image, logicalSize: logicalSize) : nil
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        AnnotationRenderer.draw(annotations, in: CGRect(origin: .zero, size: selection.size))
+        AnnotationRenderer.draw(annotations, in: CGRect(origin: .zero, size: selection.size),
+                                blurredScreenshot: blurred,
+                                screenshotRect: CGRect(origin: CGPoint(x: -selection.minX, y: -selection.minY), size: logicalSize))
         NSGraphicsContext.restoreGraphicsState()
         guard let result = context.makeImage() else { throw CaptureError.encodingFailed }
         return result

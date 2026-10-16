@@ -60,10 +60,10 @@ struct TutorialStep {
                      detail: "Open the Snap menu and choose “Sign in with Google…”. Click the Google sign-in button, then finish signing in in your browser.",
                      tip: "After a capture, click the cloud-arrow icon for “Upload & Copy Link”. Screenshots go to Snap Screenshots in your Drive; anyone with a screenshot’s link can view it."),
         TutorialStep(title: "Make your point with annotations",
-                     detail: "Choose “Select”, “Pen”, “Arrow”, “Line”, “Rectangle”, “Ellipse”, or “Text” from the tool menu. Pick a color and line width, or a text size.",
+                     detail: "Choose a drawing or text tool from the tool menu, or choose “Blur” and drag over an area of the screenshot. Blur uses a fixed strength; other marks use the color, line width, or text size controls.",
                      tip: "“Select” moves or deletes marks; double-click text to edit it. Use ⌘Z to undo and ⌘⇧Z to redo."),
         TutorialStep(title: "Switch tools without slowing down",
-                     detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all seven tools.",
+                     detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools.",
                      tip: "While editing text, Space and Tab keep their normal typing behavior. Reopen this guide anytime from Snap → “Tutorial…”."),
     ]
 }
@@ -138,7 +138,7 @@ private struct TutorialIllustration: View {
                 icon("link", label: "Copy link")
             }
         case 3:
-            HStack(spacing: 18) {
+            HStack(spacing: 14) {
                 icon("cursorarrow", label: "Select")
                 icon("pencil.tip", label: "Pen")
                 icon("arrow.up.right", label: "Arrow")
@@ -146,6 +146,7 @@ private struct TutorialIllustration: View {
                 icon("rectangle", label: "Rectangle")
                 icon("oval", label: "Ellipse")
                 icon("textformat", label: "Text")
+                icon("drop.halffull", label: "Blur")
             }
         default:
             HStack(spacing: 48) {

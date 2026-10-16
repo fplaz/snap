@@ -70,4 +70,21 @@ final class AnnotationDocumentTests: XCTestCase {
         XCTAssertTrue(document.annotations.isEmpty)
         XCTAssertFalse(document.canUndo); XCTAssertFalse(document.canRedo)
     }
+
+    func testBlurRequiresAreaAndCanBeSelectedMovedDeletedAndUndone() {
+        let document = AnnotationDocument()
+        document.commit(Annotation(tool: .blur, points: [.zero, CGPoint(x: 0, y: 30)]))
+        XCTAssertFalse(document.canUndo)
+        let blur = Annotation(tool: .blur, points: [CGPoint(x: 80, y: 60), CGPoint(x: 10, y: 20)])
+        document.commit(blur)
+        XCTAssertEqual(document.hit(at: CGPoint(x: 40, y: 40)), blur)
+        XCTAssertNil(document.hit(at: CGPoint(x: 90, y: 40)))
+        let moved = blur.moved(by: CGPoint(x: 20, y: 10))
+        document.commit(moved)
+        document.delete(blur.id)
+        document.undo(); XCTAssertEqual(document.annotations, [moved])
+        document.undo(); XCTAssertEqual(document.annotations, [blur])
+        document.undo(); XCTAssertTrue(document.annotations.isEmpty)
+        document.redo(); XCTAssertEqual(document.annotations, [blur])
+    }
 }

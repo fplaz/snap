@@ -69,11 +69,13 @@ After selection, drawing keeps the crop fixed. Use **Clear Annotations** to imme
 
 ## Annotate
 
-Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, or **Text** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
+Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, or **Blur** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
+
+With **Blur**, drag a rectangle over text or another area of the screenshot. The fixed-strength blur previews while dragging and is included in Copy, Save, and uploads. Use Select (or hold Space) to move or delete a blur area; undo and redo work as with other annotations. Blur affects the screenshot beneath drawing and text annotations. Color and line width do not affect it.
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.
 
-After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, and Text. These shortcuts leave normal text input available while editing an annotation.
+After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, Text, and Blur. These shortcuts leave normal text input available while editing an annotation.
 
 Text supports multiple lines. Return inserts a newline; **⌘Return** or clicking outside commits the edit. Escape cancels the current text edit and restores its previous value. Native text copy and undo remain available while typing. Toolbar Copy/Save commits pending text before exporting.
 

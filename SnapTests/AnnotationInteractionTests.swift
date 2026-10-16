@@ -3,6 +3,34 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testBlurDragMoveUndoAndContextualControls() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        view.toolbar.onTool?(.blur)
+        let menus = view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+        for label in ["Annotation color", "Line width", "Text size"] {
+            XCTAssertTrue(try XCTUnwrap(menus.first { $0.accessibilityLabel() == label }).isHidden)
+        }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 160, y: 160))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: 80, y: 80))
+        XCTAssertFalse(view.prepareForExport())
+        view.mouseUp(with: mouse(.leftMouseUp, x: 80, y: 80))
+        let blur = try XCTUnwrap(document.annotations.first)
+        XCTAssertEqual(blur.tool, .blur)
+        XCTAssertEqual(blur.bounds, CGRect(x: 60, y: 60, width: 80, height: 80))
+        view.keyDown(with: key(49))
+        view.mouseDown(with: mouse(.leftMouseDown, x: 120, y: 120))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 140, y: 130))
+        view.keyUp(with: key(49, type: .keyUp))
+        XCTAssertEqual(document.annotations, [blur.moved(by: CGPoint(x: 20, y: 10))])
+        document.undo(); XCTAssertEqual(document.annotations, [blur])
+        XCTAssertTrue(view.prepareForExport())
+        XCTAssertEqual(view.exportAnnotations, [blur])
+        view.toolbar.onTool?(.rectangle)
+        XCTAssertFalse(try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Annotation color" }).isHidden)
+    }
+
+    @MainActor
     private func fixture() throws -> (NSWindow, CaptureOverlayView, AnnotationDocument) {
         let context = try XCTUnwrap(CGContext(data: nil, width: 800, height: 600, bitsPerComponent: 8,
                                              bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),

@@ -3,6 +3,45 @@ import AppKit
 import ImageIO
 
 final class AnnotationRendererTests: XCTestCase {
+    func testBlurChangesOnlyItsAreaAtNativeAndRetinaScale() throws {
+        for scale in [1, 2] {
+            let context = try XCTUnwrap(CGContext(data: nil, width: 160 * scale, height: 100 * scale,
+                                                 bitsPerComponent: 8, bytesPerRow: 0,
+                                                 space: CGColorSpaceCreateDeviceRGB(),
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 160 * scale, height: 100 * scale))
+            context.setFillColor(CGColor(gray: 0, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 80 * scale, height: 100 * scale))
+            let source = try XCTUnwrap(context.makeImage())
+            let selection = CGRect(x: 20.25, y: 10.25, width: 100, height: 70)
+            let blur = Annotation(tool: .blur, points: [CGPoint(x: 40, y: 10), CGPoint(x: 80, y: 40)])
+            let result = try ScreenshotExporter.compose(image: source, selection: selection,
+                                                        logicalSize: CGSize(width: 160, height: 100), annotations: [blur])
+            let original = try ScreenshotExporter.crop(image: source, selection: selection,
+                                                       logicalSize: CGSize(width: 160, height: 100))
+            XCTAssertEqual(result.width, original.width)
+            XCTAssertEqual(result.height, original.height)
+            let center = try pixel(result, x: 60 * scale, yFromBottom: 25 * scale)
+            XCTAssertGreaterThan(center[0], 60)
+            XCTAssertLessThan(center[0], 195)
+            XCTAssertEqual(center[3], 255)
+            for point in [(30, 25), (90, 25), (60, 55)] {
+                XCTAssertEqual(try pixel(result, x: point.0 * scale, yFromBottom: point.1 * scale),
+                               try pixel(original, x: point.0 * scale, yFromBottom: point.1 * scale))
+            }
+            // Overlapping blurs do not compound their strength or erase annotations.
+            let line = Annotation(tool: .line, points: [CGPoint(x: 45, y: 25), CGPoint(x: 75, y: 25)],
+                                  style: AnnotationStyle(color: .black, width: 4))
+            let overlap = try ScreenshotExporter.compose(image: source, selection: selection,
+                                                         logicalSize: CGSize(width: 160, height: 100),
+                                                         annotations: [line, blur, blur.moved(by: CGPoint(x: 5, y: 0))])
+            XCTAssertEqual(try pixel(overlap, x: 60 * scale, yFromBottom: 25 * scale), [0, 0, 0, 255])
+            XCTAssertEqual(try pixel(overlap, x: 60 * scale, yFromBottom: 15 * scale),
+                           try pixel(result, x: 60 * scale, yFromBottom: 15 * scale))
+        }
+    }
+
     func testRetinaCompositionPreservesDimensionsAndStrokePlacement() throws {
         let image = try background(width: 200, height: 160)
         let annotation = Annotation(tool: .line, points: [CGPoint(x: 10, y: 20), CGPoint(x: 80, y: 20)],
