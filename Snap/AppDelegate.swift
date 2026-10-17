@@ -47,11 +47,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
         uploads.onUploaded = { [weak history] in history?.refresh() }
         self.account = account; self.uploads = uploads; self.history = history; self.historyWindow = historyWindow
-        let coordinator = CaptureCoordinator(uploads: uploads)
+        let annotationSettings = AnnotationSettings()
+        let settingsWindow = SettingsWindow(settings: annotationSettings)
+        let coordinator = CaptureCoordinator(uploads: uploads, settings: annotationSettings)
         let tutorial = TutorialWindow()
         self.tutorial = tutorial
-        coordinator.onCaptureStarted = { [weak uploadPanel, weak tutorial] in
+        coordinator.onCaptureStarted = { [weak uploadPanel, weak tutorial, weak settingsWindow] in
             tutorial?.hide()
+            settingsWindow?.hide()
             uploadPanel?.captureStarted()
         }
         coordinator.onCaptureEnded = { [weak uploadPanel] in uploadPanel?.captureEnded() }
@@ -66,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             updater.startUpdater()
         }
         statusBar = StatusBarController(capture: coordinator, account: account, uploads: uploads,
-                                        historyWindow: historyWindow, tutorial: tutorial, updater: updater)
+                                        historyWindow: historyWindow, tutorial: tutorial, settings: settingsWindow, updater: updater)
         NSAppleEventManager.shared().setEventHandler(account, andSelector: #selector(AccountController.handleGetURL(_:reply:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         account.restore()

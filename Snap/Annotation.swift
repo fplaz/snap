@@ -1,12 +1,12 @@
 import AppKit
 
-enum AnnotationTool: String, CaseIterable {
+enum AnnotationTool: String, CaseIterable, Codable {
     case select = "Select", pen = "Pen", arrow = "Arrow", line = "Line"
     case rectangle = "Rectangle", ellipse = "Ellipse", text = "Text"
     case blur = "Blur"
 }
 
-enum AnnotationColor: String, CaseIterable {
+enum AnnotationColor: String, CaseIterable, Codable {
     case red, yellow, green, blue, white, black
 
     var nsColor: NSColor {
@@ -21,9 +21,9 @@ enum AnnotationColor: String, CaseIterable {
     }
 }
 
-struct AnnotationStyle: Equatable {
+struct AnnotationStyle: Equatable, Codable {
     var color: AnnotationColor = .red
-    var width: CGFloat = 4
+    var width: CGFloat = 2
     var fontSize: CGFloat = 24
     var blurRadius: CGFloat = 3.5
     var isFilled = false

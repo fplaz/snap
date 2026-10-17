@@ -10,6 +10,7 @@ final class CaptureCoordinator {
     var onCaptureEnded: (() -> Void)?
     var isActive: Bool { session.phase != .idle }
     private let uploads: UploadCoordinator?
+    private let settings: AnnotationSettings
     private var uploadObservation: AnyCancellable?
     private var session = CaptureSession()
     private let document = AnnotationDocument()
@@ -24,8 +25,9 @@ final class CaptureCoordinator {
     private let log = OSLog(subsystem: "cl.fplaz.snap", category: "Capture")
     private var captureSignpost: OSSignpostID?
 
-    init(uploads: UploadCoordinator? = nil) {
+    init(uploads: UploadCoordinator? = nil, settings: AnnotationSettings? = nil) {
         self.uploads = uploads
+        self.settings = settings ?? AnnotationSettings()
         uploadObservation = uploads?.objectWillChange.sink { [weak self] in
             DispatchQueue.main.async { self?.refreshUploadAvailability() }
         }
@@ -89,7 +91,7 @@ final class CaptureCoordinator {
         // Every image is obtained before any capture window is made visible.
         for snapshot in images {
             snapshots[snapshot.displayID] = snapshot
-            let view = CaptureOverlayView(snapshot: snapshot, document: document)
+            let view = CaptureOverlayView(snapshot: snapshot, document: document, settings: settings)
             let panel = CaptureOverlayPanel(frame: snapshot.frame)
             panel.contentView = view
             panel.makeFirstResponder(view)

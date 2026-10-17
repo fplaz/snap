@@ -82,6 +82,7 @@ final class CaptureToolbar: NSView {
         toolTip = "Drag the six-dot handle to move the toolbar"
         setUploadAvailability(false, hint: "Sign in from the Snap menu to upload")
         updateHistory(canUndo: false, canRedo: false)
+        setStyle(AnnotationStyle())
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }

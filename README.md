@@ -77,6 +77,8 @@ Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, or **
 
 With **Rectangle** or **Ellipse**, the shape style menu offers **Thin outline**, **Medium outline**, **Thick outline**, and **Filled**. Filled shapes use the selected color. Select an existing shape to change between outline and fill; filled shapes can be selected and moved by clicking anywhere inside them. Style changes support undo and redo.
 
+Open **Annotation tool settings…** from the Snap menu (⌘,) to configure the starting tool, color, line/outline width, shape fill, text size, and blur strength. Enable **Use last-used settings** to carry your toolbar choices across captures and app restarts. Otherwise, each capture starts with your configured defaults. Fresh installs start with a red rectangle and a thin outline.
+
 With **Blur**, drag a rectangle over text or another area of the screenshot. Adjust the toolbar's strength slider from 1 (light) to 12 (strong), in half-step increments; the default is 3.5. Each area keeps its own strength. Select an existing blur area to change its strength, move it, or delete it; undo and redo work as with other annotations. Blur previews while drawing and is included in Copy, Save, and uploads. It affects the screenshot beneath drawing and text annotations. Color and line width do not affect it.
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.

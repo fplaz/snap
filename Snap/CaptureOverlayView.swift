@@ -10,6 +10,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var tracking: NSTrackingArea?
     let toolbar = CaptureToolbar()
     let document: AnnotationDocument
+    private let settings: AnnotationSettings?
     private var tool: AnnotationTool = .rectangle
     private var toolBeforeSpace: AnnotationTool?
     private var style = AnnotationStyle()
@@ -45,9 +46,13 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         }
     }
 
-    init(snapshot: DisplaySnapshot, document: AnnotationDocument) {
+    init(snapshot: DisplaySnapshot, document: AnnotationDocument, settings: AnnotationSettings? = nil) {
         self.snapshot = snapshot
         self.document = document
+        self.settings = settings
+        let initial = settings?.beginCapture() ?? AnnotationDefaults()
+        tool = initial.tool
+        style = initial.style
         blurredScreenshots.countLimit = 3
         screenshot = NSImage(cgImage: snapshot.image, size: snapshot.logicalSize)
         super.init(frame: CGRect(origin: .zero, size: snapshot.logicalSize))
@@ -57,6 +62,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             self?.changeTool(tool)
         }
         toolbar.setTool(tool)
+        toolbar.setStyle(style)
         toolbar.onStyle = { [weak self] style in self?.changeStyle(style) }
         toolbar.onUndo = { [weak self] in self?.undoAnnotation() }
         toolbar.onRedo = { [weak self] in self?.redoAnnotation() }
@@ -399,6 +405,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
 
     private func changeTool(_ newTool: AnnotationTool) {
         guard !isExporting else { return }
+        settings?.record(tool: newTool)
         commitText(); cancelGesture(); selectedID = nil
         if toolBeforeSpace != nil {
             toolBeforeSpace = newTool
@@ -498,6 +505,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private func changeStyle(_ newStyle: AnnotationStyle) {
         guard !isExporting else { return }
         commitText(); cancelGesture(); style = newStyle
+        settings?.record(style: newStyle)
         if var selected = document.annotations.first(where: { $0.id == selectedID }) {
             selected.style = newStyle
             if selected.tool == .text {

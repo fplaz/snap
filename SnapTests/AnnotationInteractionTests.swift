@@ -36,7 +36,7 @@ final class AnnotationInteractionTests: XCTestCase {
             let width = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Line width" })
             XCTAssertFalse(shapeStyle.isHidden)
             XCTAssertTrue(width.isHidden)
-            XCTAssertEqual(shapeStyle.indexOfSelectedItem, 1)
+            XCTAssertEqual(shapeStyle.indexOfSelectedItem, 0)
             shapeStyle.selectItem(at: 3)
             shapeStyle.sendAction(shapeStyle.action!, to: shapeStyle.target)
             view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
@@ -156,14 +156,15 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
-    private func fixture() throws -> (NSWindow, CaptureOverlayView, AnnotationDocument) {
+    private func fixture(settings: AnnotationSettings? = nil) throws -> (NSWindow, CaptureOverlayView, AnnotationDocument) {
         let context = try XCTUnwrap(CGContext(data: nil, width: 800, height: 600, bitsPerComponent: 8,
                                              bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         let image = try XCTUnwrap(context.makeImage())
         let document = AnnotationDocument()
         let view = CaptureOverlayView(snapshot: DisplaySnapshot(displayID: 1,
-                                      frame: CGRect(x: 0, y: 0, width: 400, height: 300), image: image), document: document)
+                                      frame: CGRect(x: 0, y: 0, width: 400, height: 300), image: image),
+                                      document: document, settings: settings)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = view
@@ -172,6 +173,42 @@ final class AnnotationInteractionTests: XCTestCase {
         view.mouseDown(with: mouse(.leftMouseDown, x: 20, y: 20))
         view.mouseUp(with: mouse(.leftMouseUp, x: 350, y: 260))
         return (window, view, document)
+    }
+
+    @MainActor
+    func testConfiguredCaptureDefaultsAndLastUsedToolbarChoices() async throws {
+        let suite = "SnapToolbarSettingsTests.\(UUID().uuidString)"
+        let storage = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { storage.removePersistentDomain(forName: suite) }
+        let settings = AnnotationSettings(storage: storage)
+        settings.defaults = AnnotationDefaults(tool: .ellipse,
+            style: AnnotationStyle(color: .blue, width: 8, fontSize: 32, blurRadius: 6, isFilled: true))
+        let (window, view, document) = try fixture(settings: settings)
+        defer { window.close() }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 160, y: 160))
+        let mark = try XCTUnwrap(document.annotations.first)
+        XCTAssertEqual(mark.tool, .ellipse)
+        XCTAssertEqual(mark.style, settings.defaults.style)
+        let menus = view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+        let shape = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Shape style" })
+        XCTAssertEqual(shape.indexOfSelectedItem, 3)
+        shape.selectItem(at: 0)
+        shape.sendAction(shape.action!, to: shape.target)
+        view.toolbar.onTool?(.pen)
+        settings.useLastUsed = true
+        XCTAssertEqual(settings.initial.tool, .pen)
+        XCTAssertEqual(settings.initial.style.width, 2)
+        XCTAssertFalse(settings.initial.style.isFilled)
+        view.keyDown(with: key(49))
+        XCTAssertEqual(settings.initial.tool, .pen)
+        view.keyUp(with: key(49, type: .keyUp))
+        let (nextWindow, nextView, nextDocument) = try fixture(settings: AnnotationSettings(storage: storage))
+        defer { nextWindow.close() }
+        nextView.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+        nextView.mouseUp(with: mouse(.leftMouseUp, x: 160, y: 160))
+        XCTAssertEqual(nextDocument.annotations.first?.tool, .pen)
+        XCTAssertEqual(nextDocument.annotations.first?.style, settings.initial.style)
     }
 
     @MainActor

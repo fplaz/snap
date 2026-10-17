@@ -11,15 +11,18 @@ final class StatusBarController: NSObject {
     private let uploads: UploadCoordinator
     private let historyWindow: ScreenshotHistoryWindow
     private let tutorial: TutorialWindow
+    private let settings: SettingsWindow
     private let updater: SPUStandardUpdaterController
     private var observers: [AnyCancellable] = []
     private var shortcut: GlobalShortcut?
     private var copyShortcut: GlobalShortcut?
 
     init(capture: CaptureCoordinator, account: AccountController, uploads: UploadCoordinator,
-         historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow, updater: SPUStandardUpdaterController) {
+         historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow, settings: SettingsWindow,
+         updater: SPUStandardUpdaterController) {
         self.capture = capture; self.account = account; self.uploads = uploads; self.historyWindow = historyWindow
         self.tutorial = tutorial
+        self.settings = settings
         self.updater = updater
         super.init()
         if let button = item.button {
@@ -120,6 +123,9 @@ final class StatusBarController: NSObject {
         link.target = self; link.isEnabled = uploads.latestLink != nil
         menu.addItem(link)
         menu.addItem(.separator())
+        let settings = NSMenuItem(title: "Annotation tool settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         let tutorial = NSMenuItem(title: "Tutorial…", action: #selector(showTutorial), keyEquivalent: "")
         tutorial.target = self
         menu.addItem(tutorial)
@@ -150,6 +156,12 @@ final class StatusBarController: NSObject {
         capture.cancel()
         historyWindow.hide()
         DispatchQueue.main.async { [weak self] in self?.tutorial.show() }
+    }
+    @objc private func showSettings() {
+        capture.cancel()
+        historyWindow.hide()
+        tutorial.hide()
+        DispatchQueue.main.async { [weak self] in self?.settings.show() }
     }
     @objc private func signOut() { account.signOut() }
     @objc private func checkForUpdates() {
