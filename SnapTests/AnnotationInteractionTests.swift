@@ -200,6 +200,47 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
+    func testAllResizeHandlesKeepOppositeEdgesAndAnnotationsFixed() async throws {
+        let cases: [(CGPoint, CGRect)] = [
+            (CGPoint(x: 22, y: 22), CGRect(x: 30, y: 35, width: 320, height: 225)),
+            (CGPoint(x: 348, y: 22), CGRect(x: 20, y: 35, width: 340, height: 225)),
+            (CGPoint(x: 22, y: 258), CGRect(x: 30, y: 20, width: 320, height: 255)),
+            (CGPoint(x: 348, y: 258), CGRect(x: 20, y: 20, width: 340, height: 255)),
+            (CGPoint(x: 22, y: 140), CGRect(x: 30, y: 20, width: 320, height: 240)),
+            (CGPoint(x: 348, y: 140), CGRect(x: 20, y: 20, width: 340, height: 240)),
+            (CGPoint(x: 185, y: 22), CGRect(x: 20, y: 35, width: 330, height: 225)),
+            (CGPoint(x: 185, y: 258), CGRect(x: 20, y: 20, width: 330, height: 255))
+        ]
+        for (point, expected) in cases {
+            let (window, view, document) = try fixture()
+            defer { window.close() }
+            view.mouseDown(with: mouse(.leftMouseDown, x: 70, y: 100))
+            view.mouseUp(with: mouse(.leftMouseUp, x: 120, y: 130))
+            let annotations = document.annotations
+            let toolbar = view.toolbar.frame
+            var resized: CGRect?
+            view.onResizeSelection = { resized = $0 }
+            view.mouseDown(with: mouse(.leftMouseDown, x: point.x, y: point.y))
+            XCTAssertFalse(view.prepareForExport())
+            view.mouseDragged(with: mouse(.leftMouseDragged, x: point.x + 10, y: point.y + 15))
+            XCTAssertEqual(view.selection, expected, "Handle at \(point)")
+            XCTAssertEqual(document.annotations, annotations)
+            XCTAssertEqual(view.exportAnnotations, annotations.map {
+                $0.moved(by: CGPoint(x: 20 - expected.minX, y: 20 - expected.minY))
+            })
+            view.keyDown(with: escape())
+            XCTAssertEqual(view.selection, CGRect(x: 20, y: 20, width: 330, height: 240))
+            XCTAssertEqual(view.toolbar.frame, toolbar)
+            XCTAssertEqual(view.exportAnnotations, annotations)
+            XCTAssertNil(resized)
+            view.mouseDown(with: mouse(.leftMouseDown, x: point.x, y: point.y))
+            view.mouseUp(with: mouse(.leftMouseUp, x: point.x + 10, y: point.y + 15))
+            XCTAssertEqual(resized, expected)
+            XCTAssertTrue(view.prepareForExport())
+        }
+    }
+
+    @MainActor
     func testCornerResizeKeepsAnnotationsAtScreenPositionAndUpdatesExportCoordinates() async throws {
         let (window, view, document) = try fixture()
         defer { window.close() }
@@ -251,10 +292,10 @@ final class AnnotationInteractionTests: XCTestCase {
         let toolbar = view.toolbar.frame
         var moved: CGRect?
         view.onMoveSelection = { moved = $0 }
-        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 140))
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 100))
         XCTAssertFalse(view.prepareForExport())
-        view.mouseDragged(with: mouse(.leftMouseDragged, x: original.maxX + 15, y: 150))
-        view.mouseUp(with: mouse(.leftMouseUp, x: original.maxX + 15, y: 150))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: original.maxX + 15, y: 110))
+        view.mouseUp(with: mouse(.leftMouseUp, x: original.maxX + 15, y: 110))
         XCTAssertEqual(view.selection, original.offsetBy(dx: 15, dy: 10))
         XCTAssertEqual(moved, view.selection)
         XCTAssertEqual(document.annotations, annotations)
@@ -268,7 +309,7 @@ final class AnnotationInteractionTests: XCTestCase {
         defer { window.close() }
         let original = try XCTUnwrap(view.selection)
         let toolbar = view.toolbar.frame
-        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 140))
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.maxX, y: 100))
         view.mouseDragged(with: mouse(.leftMouseDragged, x: 1000, y: 1000))
         XCTAssertEqual(view.selection?.maxX, view.bounds.maxX)
         XCTAssertEqual(view.selection?.maxY, view.bounds.maxY)

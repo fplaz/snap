@@ -1,6 +1,41 @@
 import CoreGraphics
 
 enum SelectionGeometry {
+    enum ResizeHandle: CaseIterable {
+        case bottomLeft, bottomRight, topLeft, topRight, left, right, bottom, top
+
+        var movesLeft: Bool { self == .left || self == .bottomLeft || self == .topLeft }
+        var movesRight: Bool { self == .right || self == .bottomRight || self == .topRight }
+        var movesBottom: Bool { self == .bottom || self == .bottomLeft || self == .bottomRight }
+        var movesTop: Bool { self == .top || self == .topLeft || self == .topRight }
+
+        func anchor(in selection: CGRect) -> CGPoint {
+            CGPoint(x: movesLeft ? selection.minX : movesRight ? selection.maxX : selection.midX,
+                    y: movesBottom ? selection.minY : movesTop ? selection.maxY : selection.midY)
+        }
+
+        func hitRect(in selection: CGRect) -> CGRect {
+            let anchor = anchor(in: selection)
+            let x = movesLeft ? anchor.x - 6 : movesRight ? anchor.x - 18 : anchor.x - 12
+            let y = movesBottom ? anchor.y - 6 : movesTop ? anchor.y - 18 : anchor.y - 12
+            return CGRect(x: x, y: y, width: 24, height: 24)
+        }
+    }
+
+    static func resized(_ original: CGRect, handle: ResizeHandle, delta: CGPoint, bounds: CGRect) -> CGRect {
+        let minimumWidth = min(16, original.width)
+        let minimumHeight = min(16, original.height)
+        let left = handle.movesLeft
+            ? max(bounds.minX, min(original.maxX - minimumWidth, original.minX + delta.x)) : original.minX
+        let right = handle.movesRight
+            ? min(bounds.maxX, max(original.minX + minimumWidth, original.maxX + delta.x)) : original.maxX
+        let bottom = handle.movesBottom
+            ? max(bounds.minY, min(original.maxY - minimumHeight, original.minY + delta.y)) : original.minY
+        let top = handle.movesTop
+            ? min(bounds.maxY, max(original.minY + minimumHeight, original.maxY + delta.y)) : original.maxY
+        return CGRect(x: left, y: bottom, width: right - left, height: top - bottom)
+    }
+
     static func rectangle(from start: CGPoint, to end: CGPoint, in bounds: CGRect) -> CGRect {
         let a = clamped(start, to: bounds)
         let b = clamped(end, to: bounds)

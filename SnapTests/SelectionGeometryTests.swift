@@ -2,6 +2,23 @@ import XCTest
 import CoreGraphics
 
 final class SelectionGeometryTests: XCTestCase {
+    func testAllResizeHandlesClampToDisplayAndMinimumSize() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let original = CGRect(x: 20, y: 20, width: 330, height: 240)
+        for handle in SelectionGeometry.ResizeHandle.allCases {
+            for delta in [CGPoint(x: -1000, y: -1000), CGPoint(x: 1000, y: 1000)] {
+                let resized = SelectionGeometry.resized(original, handle: handle, delta: delta, bounds: bounds)
+                XCTAssertTrue(bounds.contains(resized))
+                XCTAssertGreaterThanOrEqual(resized.width, 16)
+                XCTAssertGreaterThanOrEqual(resized.height, 16)
+                if !handle.movesLeft { XCTAssertEqual(resized.minX, original.minX) }
+                if !handle.movesRight { XCTAssertEqual(resized.maxX, original.maxX) }
+                if !handle.movesBottom { XCTAssertEqual(resized.minY, original.minY) }
+                if !handle.movesTop { XCTAssertEqual(resized.maxY, original.maxY) }
+            }
+        }
+    }
+
     func testResizeToolbarFollowsOutsideEdgesAndWaitsForInsideEdges() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 1000)
         let start = CGRect(x: 100, y: 300, width: 400, height: 400)

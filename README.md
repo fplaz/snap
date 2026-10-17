@@ -69,6 +69,8 @@ For a quick copy, press **⌘⇧6** or choose **Take screenshot and copy** from 
 
 After selection, drawing keeps the crop fixed. Use **Clear Annotations** to immediately remove all drawing and text while keeping the selected area and toolbar open. Selection stays within the display where the drag starts. Canceling the native save panel keeps the screenshot and annotations available. Copy or successful save ends capture and returns focus to your previous app.
 
+Drag any corner to resize the capture area, or drag the small black handle at the middle of an edge to move just that edge. Drag the rest of the border to move the whole area. Resizing keeps annotations at their screen positions; Escape during a resize restores the previous area.
+
 ## Annotate
 
 Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, or **Blur** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.

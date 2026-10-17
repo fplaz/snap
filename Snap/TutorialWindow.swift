@@ -54,7 +54,7 @@ struct TutorialStep {
                      detail: "Press ⌘⇧7 to select an area and annotate it. Use ⌘⇧6 to select an area and copy it immediately. Both options are also in the Snap menu.",
                      tip: "Allow Screen Recording when macOS asks. Copy with ⌘C or save a PNG with ⌘S."),
         TutorialStep(title: "Adjust your screenshot area",
-                     detail: "Drag any edge of the selected area to move it. Drag the bottom-right corner to resize it.",
+                     detail: "Drag the border to move the selected area. Drag any corner or the black handle at the middle of an edge to resize it.",
                      tip: "Drag the six-dot handle to move the toolbar."),
         TutorialStep(title: "Share through Google Drive",
                      detail: "Open the Snap menu and choose “Sign in with Google…”. Click the Google sign-in button, then finish signing in in your browser.",

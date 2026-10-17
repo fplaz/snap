@@ -20,7 +20,8 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var textEditor: AnnotationTextEditor?
     private var editingText: Annotation?
     private var areaDrag: (start: CGPoint, selection: CGRect, toolbar: CGRect)?
-    private var areaResize: (start: CGPoint, selection: CGRect, toolbar: CGRect, offset: CGPoint)?
+    private var areaResize: (start: CGPoint, selection: CGRect, toolbar: CGRect, offset: CGPoint,
+                             handle: SelectionGeometry.ResizeHandle)?
     private var annotationOffset: CGPoint = .zero
     private let borderHitWidth: CGFloat = 7
     private var contentOrigin: CGPoint {
@@ -92,8 +93,9 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                 CGRect(x: selection.maxX - borderHitWidth, y: selection.minY, width: borderHitWidth * 2, height: selection.height)
             ]
             for edge in edges { addCursorRect(edge.intersection(bounds), cursor: cursor) }
-            if let handle = resizeHandle {
-                addCursorRect(handle.intersection(bounds), cursor: areaResize == nil ? .openHand : .closedHand)
+            for handle in SelectionGeometry.ResizeHandle.allCases {
+                addCursorRect(handle.hitRect(in: selection).intersection(bounds),
+                              cursor: areaResize == nil ? .openHand : .closedHand)
             }
         }
         if !toolbar.isHidden {
@@ -112,7 +114,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             else { NSCursor.arrow.set() }
         }
         else {
-            if resizeHandle?.contains(point) == true { NSCursor.openHand.set() }
+            if resizeHandle(at: point) != nil { NSCursor.openHand.set() }
             else if isSelectionBorder(point) { NSCursor.openHand.set() }
             else { toolCursor.set() }
         }
@@ -120,9 +122,9 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
 
     private var toolCursor: NSCursor { tool == .select ? .arrow : .crosshair }
 
-    private var resizeHandle: CGRect? {
+    private func resizeHandle(at point: CGPoint) -> SelectionGeometry.ResizeHandle? {
         guard let selection, dragOrigin == nil, !isExporting else { return nil }
-        return CGRect(x: selection.maxX - 18, y: selection.minY - 6, width: 24, height: 24)
+        return SelectionGeometry.ResizeHandle.allCases.first { $0.hitRect(in: selection).contains(point) }
     }
 
     private func isSelectionBorder(_ point: CGPoint) -> Bool {
@@ -177,12 +179,25 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             border.stroke()
             if dragOrigin == nil {
                 NSColor.black.setStroke()
-                let corner = NSBezierPath()
-                corner.lineWidth = 2.5
-                corner.move(to: CGPoint(x: selection.maxX - 13, y: selection.minY + 1.5))
-                corner.line(to: CGPoint(x: selection.maxX - 1.5, y: selection.minY + 1.5))
-                corner.line(to: CGPoint(x: selection.maxX - 1.5, y: selection.minY + 13))
-                corner.stroke()
+                for handle in SelectionGeometry.ResizeHandle.allCases {
+                    let anchor = handle.anchor(in: selection.insetBy(dx: 1.5, dy: 1.5))
+                    let path = NSBezierPath()
+                    path.lineWidth = 2.5
+                    if (handle.movesLeft || handle.movesRight) && (handle.movesBottom || handle.movesTop) {
+                        let dx: CGFloat = handle.movesLeft ? 11.5 : -11.5
+                        let dy: CGFloat = handle.movesBottom ? 11.5 : -11.5
+                        path.move(to: CGPoint(x: anchor.x + dx, y: anchor.y))
+                        path.line(to: anchor)
+                        path.line(to: CGPoint(x: anchor.x, y: anchor.y + dy))
+                    } else {
+                        let horizontal = handle.movesBottom || handle.movesTop
+                        path.move(to: CGPoint(x: anchor.x - (horizontal ? 6 : 0),
+                                              y: anchor.y - (horizontal ? 0 : 6)))
+                        path.line(to: CGPoint(x: anchor.x + (horizontal ? 6 : 0),
+                                              y: anchor.y + (horizontal ? 0 : 6)))
+                    }
+                    path.stroke()
+                }
             }
         } else {
             let text = "Drag to capture · Esc to cancel" as NSString
@@ -203,10 +218,10 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if let selection {
             commitText()
             let position = convert(event.locationInWindow, from: nil)
-            if resizeHandle?.contains(position) == true, toolbar.isHidden || !toolbar.frame.contains(position) {
+            if let handle = resizeHandle(at: position), toolbar.isHidden || !toolbar.frame.contains(position) {
                 cancelGesture(); selectedID = nil
                 window?.makeKey(); window?.makeFirstResponder(self)
-                areaResize = (position, selection, toolbar.frame, annotationOffset)
+                areaResize = (position, selection, toolbar.frame, annotationOffset, handle)
                 NSCursor.closedHand.set()
                 needsDisplay = true
                 return
@@ -426,11 +441,11 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         guard let areaResize, !isExporting else { return }
         let point = convert(event.locationInWindow, from: nil)
         let original = areaResize.selection
-        let right = min(bounds.maxX, max(original.minX + min(16, original.width), original.maxX + point.x - areaResize.start.x))
-        let bottom = max(bounds.minY, min(original.maxY - min(16, original.height), original.minY + point.y - areaResize.start.y))
-        let rectangle = CGRect(x: original.minX, y: bottom, width: right - original.minX, height: original.maxY - bottom)
+        let rectangle = SelectionGeometry.resized(original, handle: areaResize.handle,
+            delta: CGPoint(x: point.x - areaResize.start.x, y: point.y - areaResize.start.y), bounds: bounds)
         selection = rectangle
-        annotationOffset = CGPoint(x: areaResize.offset.x, y: areaResize.offset.y + original.minY - bottom)
+        annotationOffset = CGPoint(x: areaResize.offset.x + original.minX - rectangle.minX,
+                                   y: areaResize.offset.y + original.minY - rectangle.minY)
         toolbar.frame = SelectionGeometry.resizedToolbar(original: areaResize.toolbar, from: original,
                                                          to: rectangle, bounds: toolbar.movementBounds ?? bounds)
         window?.invalidateCursorRects(for: self); needsDisplay = true
