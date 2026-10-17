@@ -262,7 +262,7 @@ final class CaptureToolbar: NSView {
     func setTool(_ selected: AnnotationTool) {
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
         setContextualTool(selected)
-        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Hold Space: Select"
+        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Shift+Tab: previous tool · Hold Space: Select"
     }
     func setContextualTool(_ selected: AnnotationTool) {
         width.isHidden = selected == .text || selected == .blur; fontSize.isHidden = selected != .text

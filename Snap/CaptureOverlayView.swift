@@ -355,7 +355,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         guard event.type == .keyDown, selection != nil, dragOrigin == nil,
               !isExporting, textEditor == nil else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
-        guard modifiers.isEmpty else { return false }
+        guard modifiers.isEmpty || (event.keyCode == 48 && modifiers == .shift) else { return false }
         switch event.keyCode {
         case 49:
             if !event.isARepeat, toolBeforeSpace == nil {
@@ -368,7 +368,8 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             if !event.isARepeat {
                 let tools = AnnotationTool.allCases
                 let index = tools.firstIndex(of: toolBeforeSpace ?? tool)!
-                changeTool(tools[(index + 1) % tools.count])
+                let step = modifiers.contains(.shift) ? -1 : 1
+                changeTool(tools[(index + step + tools.count) % tools.count])
             }
             return true
         default: return false

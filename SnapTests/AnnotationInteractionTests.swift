@@ -405,6 +405,35 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
+    func testShiftTabCyclesBackwardAndWrapsWithoutRepeating() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        let popup = try toolPopup(view)
+        view.toolbar.onTool?(.select)
+        for index in 1...AnnotationTool.allCases.count {
+            XCTAssertTrue(view.handleToolShortcut(key(48, modifiers: .shift)))
+            XCTAssertTrue(view.handleToolShortcut(key(48, repeatKey: true, modifiers: .shift)))
+            XCTAssertEqual(popup.indexOfSelectedItem,
+                           (AnnotationTool.allCases.count - index) % AnnotationTool.allCases.count)
+        }
+        for modifiers: NSEvent.ModifierFlags in [.command, .control, .option, [.shift, .command]] {
+            XCTAssertFalse(view.handleToolShortcut(key(48, modifiers: modifiers)))
+        }
+        XCTAssertFalse(view.handleToolShortcut(key(49, modifiers: .shift)))
+    }
+
+    @MainActor
+    func testShiftTabWhileSpaceHeldChangesToolRestoredOnRelease() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.keyDown(with: key(49))
+        view.keyDown(with: key(48, modifiers: .shift))
+        XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, 0)
+        view.keyUp(with: key(49, type: .keyUp))
+        XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .line))
+    }
+
+    @MainActor
     func testTabWhileSpaceHeldChangesToolRestoredOnRelease() async throws {
         let (window, view, _) = try fixture()
         defer { window.close() }
@@ -423,6 +452,7 @@ final class AnnotationInteractionTests: XCTestCase {
         view.mouseDown(with: mouse(.leftMouseDown, x: 50, y: 200))
         XCTAssertFalse(view.handleToolShortcut(key(49)))
         XCTAssertFalse(view.handleToolShortcut(key(48)))
+        XCTAssertFalse(view.handleToolShortcut(key(48, modifiers: .shift)))
         let editor = try XCTUnwrap(view.subviews.compactMap { $0 as? AnnotationTextEditor }.first)
         editor.insertText("Two words", replacementRange: NSRange(location: 0, length: 0))
         XCTAssertEqual(editor.string, "Two words")
@@ -449,6 +479,9 @@ final class AnnotationInteractionTests: XCTestCase {
         panel.makeFirstResponder(popup)
         panel.sendEvent(key(48))
         XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+        panel.sendEvent(key(48, modifiers: .shift))
+        XCTAssertEqual(popup.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .rectangle))
+        panel.sendEvent(key(48))
         panel.sendEvent(key(49))
         XCTAssertEqual(popup.indexOfSelectedItem, 0)
         panel.resignKey()

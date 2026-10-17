@@ -63,7 +63,7 @@ struct TutorialStep {
                      detail: "Choose a drawing or text tool from the tool menu, or choose “Blur” and drag over an area of the screenshot. Adjust blur with the strength slider; other marks use the color, line width, or text size controls.",
                      tip: "“Select” moves or deletes marks; double-click text to edit it. Use ⌘Z to undo and ⌘⇧Z to redo."),
         TutorialStep(title: "Switch tools without slowing down",
-                     detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools.",
+                     detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools, or Shift+Tab to cycle backward.",
                      tip: "While editing text, Space and Tab keep their normal typing behavior. Reopen this guide anytime from Snap → “Tutorial…”."),
     ]
 }
