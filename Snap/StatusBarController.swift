@@ -45,21 +45,29 @@ final class StatusBarController: NSObject {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             NSColor.black.setStroke()
             let path = NSBezierPath()
-            path.lineWidth = 2
+            path.lineWidth = 1.5
             path.lineCapStyle = .round
             path.lineJoinStyle = .round
             for corner in [CGPoint(x: 2, y: 2), CGPoint(x: 16, y: 2),
                            CGPoint(x: 2, y: 16), CGPoint(x: 16, y: 16)] {
                 let dx: CGFloat = corner.x < 9 ? 4 : -4
                 let dy: CGFloat = corner.y < 9 ? 4 : -4
+                let radius: CGFloat = 1.5
+                let horizontal = CGPoint(x: corner.x + (dx > 0 ? radius : -radius), y: corner.y)
+                let vertical = CGPoint(x: corner.x, y: corner.y + (dy > 0 ? radius : -radius))
                 path.move(to: CGPoint(x: corner.x + dx, y: corner.y))
-                path.line(to: corner)
+                path.line(to: horizontal)
+                path.curve(to: vertical,
+                           controlPoint1: CGPoint(x: horizontal.x + (corner.x - horizontal.x) * 0.55228475,
+                                                  y: corner.y),
+                           controlPoint2: CGPoint(x: corner.x,
+                                                  y: vertical.y + (corner.y - vertical.y) * 0.55228475))
                 path.line(to: CGPoint(x: corner.x, y: corner.y + dy))
             }
             path.stroke()
             let letter = "S" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: NSColor.black
+                .font: NSFont.systemFont(ofSize: 10, weight: .semibold), .foregroundColor: NSColor.black
             ]
             let size = letter.size(withAttributes: attributes)
             letter.draw(at: CGPoint(x: (18 - size.width) / 2, y: (18 - size.height) / 2), withAttributes: attributes)
@@ -90,13 +98,12 @@ final class StatusBarController: NSObject {
             menu.addItem(signIn)
         }
         menu.addItem(.separator())
-        let take = NSMenuItem(title: "Take screenshot", action: #selector(takeScreenshot), keyEquivalent: "7")
+        let take = NSMenuItem(title: "Take screenshot and annotate", action: #selector(takeScreenshot), keyEquivalent: "7")
         take.keyEquivalentModifierMask = [.command, .shift]
         take.target = self
         if shortcut?.registrationStatus != noErr {
             take.toolTip = "⌘⇧7 unavailable — use this menu item"
         }
-        menu.addItem(take)
         let copy = NSMenuItem(title: "Take screenshot and copy", action: #selector(takeScreenshotAndCopy), keyEquivalent: "6")
         copy.keyEquivalentModifierMask = [.command, .shift]
         copy.target = self
@@ -104,6 +111,8 @@ final class StatusBarController: NSObject {
             copy.toolTip = "⌘⇧6 unavailable — use this menu item"
         }
         menu.addItem(copy)
+        menu.addItem(take)
+        menu.addItem(.separator())
         let history = NSMenuItem(title: "My screenshots", action: #selector(showHistory), keyEquivalent: "")
         history.target = self; history.isEnabled = account.id != nil
         menu.addItem(history)
