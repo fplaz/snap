@@ -2,6 +2,16 @@ import AppKit
 import XCTest
 
 final class AnnotationSettingsTests: XCTestCase {
+    func testStampSizeDecodesOldPreferencesAndPersistsNewSize() throws {
+        let old = Data(#"{"color":"blue","width":8,"fontSize":32,"blurRadius":7,"isFilled":true}"#.utf8)
+        let decoded = try JSONDecoder().decode(AnnotationStyle.self, from: old)
+        XCTAssertEqual(decoded.stampDiameter, 32)
+        XCTAssertEqual(decoded.color, .blue)
+        XCTAssertEqual(decoded.width, 8)
+        let style = AnnotationStyle(color: .green, stampDiameter: 40)
+        XCTAssertEqual(try JSONDecoder().decode(AnnotationStyle.self, from: JSONEncoder().encode(style)), style)
+    }
+
     @MainActor
     func testFreshInstallUsesThinOutlineAndFixedDefaults() throws {
         try withStorage { storage in

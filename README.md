@@ -73,7 +73,9 @@ Drag any corner to resize the capture area, or drag the small black handle at th
 
 ## Annotate
 
-Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, or **Blur** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
+Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, **Blur**, or **Number stamps** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
+
+With **Number stamps**, click to place a circle in the selected color with a white number. Choose Small (24 pt), Medium (32 pt, the default), or Large (40 pt) from the stamp size control. Each capture starts at 1 and advances to one above the highest remaining stamp. Switching tools preserves the sequence. Undoing or deleting the highest stamp makes its number available again; existing stamps keep their numbers. Select a stamp to move it, change its color or size, or delete it. Stamps are included in Copy, Save, and uploads.
 
 With **Rectangle** or **Ellipse**, the shape style menu offers **Thin outline**, **Medium outline**, **Thick outline**, and **Filled**. Filled shapes use the selected color. Select an existing shape to change between outline and fill; filled shapes can be selected and moved by clicking anywhere inside them. Style changes support undo and redo.
 
@@ -83,7 +85,7 @@ With **Blur**, drag a rectangle over text or another area of the screenshot. Adj
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.
 
-After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, Text, and Blur, or **Shift+Tab** to cycle backward. These shortcuts leave normal text input available while editing an annotation.
+After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, Text, Blur, and Number stamps, or **Shift+Tab** to cycle backward. These shortcuts leave normal text input available while editing an annotation.
 
 Text supports multiple lines. Return inserts a newline; **⌘Return** or clicking outside commits the edit. Escape cancels the current text edit and restores its previous value. Native text copy and undo remain available while typing. Toolbar Copy/Save commits pending text before exporting.
 

@@ -44,6 +44,7 @@ enum AnnotationRenderer {
         }
         for annotation in annotations where annotation.tool != .blur {
             if annotation.tool == .text { drawText(annotation); continue }
+            if annotation.tool == .numberStamp { drawNumberStamp(annotation); continue }
             let path = NSBezierPath()
             path.lineWidth = annotation.style.width
             path.lineCapStyle = .round
@@ -78,6 +79,27 @@ enum AnnotationRenderer {
         paragraph.lineBreakMode = .byWordWrapping
         return [.font: NSFont.systemFont(ofSize: style.fontSize),
                 .foregroundColor: style.color.nsColor, .paragraphStyle: paragraph]
+    }
+
+    private static func drawNumberStamp(_ annotation: Annotation) {
+        guard !annotation.isEmpty else { return }
+        annotation.style.color.nsColor.setFill()
+        NSBezierPath(ovalIn: annotation.bounds).fill()
+        let text = String(annotation.number) as NSString
+        var fontSize = annotation.style.stampDiameter * 0.625
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold),
+            .foregroundColor: NSColor.white
+        ]
+        let availableWidth = annotation.style.stampDiameter * 0.75
+        let measuredWidth = text.size(withAttributes: attributes).width
+        if measuredWidth > availableWidth {
+            fontSize *= availableWidth / measuredWidth
+            attributes[.font] = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .bold)
+        }
+        let size = text.size(withAttributes: attributes)
+        text.draw(at: CGPoint(x: annotation.bounds.midX - size.width / 2,
+                              y: annotation.bounds.midY - size.height / 2), withAttributes: attributes)
     }
 
     static func textHeight(_ text: String, width: CGFloat, style: AnnotationStyle) -> CGFloat {

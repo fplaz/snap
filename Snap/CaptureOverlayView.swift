@@ -172,10 +172,9 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                                     screenshotRect: CGRect(x: -contentOrigin.x, y: -contentOrigin.y,
                                                            width: bounds.width, height: bounds.height))
             if let selected = annotations.first(where: { $0.id == selectedID }) {
-                NSColor.white.setStroke()
+                NSColor.systemBlue.setStroke()
                 let outline = NSBezierPath(rect: selected.bounds.insetBy(dx: -4, dy: -4))
                 outline.lineWidth = 1
-                outline.setLineDash([4, 3], count: 2, phase: 0)
                 outline.stroke()
             }
             NSGraphicsContext.restoreGraphicsState()
@@ -249,6 +248,10 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                     if event.clickCount == 2, annotation.tool == .text { beginText(annotation); return }
                     moveOriginal = annotation; draft = annotation; annotationOrigin = point
                 }
+            } else if tool == .numberStamp {
+                draft = Annotation(tool: .numberStamp, points: [point], style: style,
+                                   number: document.nextStampNumber)
+                annotationOrigin = point
             } else if tool == .text {
                 let rect = CGRect(x: point.x, y: max(-annotationOffset.y, point.y - style.fontSize * 1.4),
                                   width: min(280, selection.width - annotationOffset.x - point.x),
@@ -481,6 +484,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if let original = moveOriginal {
             draft = original.moved(by: CGPoint(x: point.x - origin.x, y: point.y - origin.y))
         } else if var annotation = draft {
+            if annotation.tool == .numberStamp { return }
             point = SelectionGeometry.clamped(point, to: CGRect(x: -annotationOffset.x, y: -annotationOffset.y,
                                                                width: selection.width, height: selection.height))
             if annotation.tool == .pen {

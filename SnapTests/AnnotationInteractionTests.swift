@@ -3,6 +3,68 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testNumberStampsAdvanceAcrossToolsAndSupportCancelUndoMoveAndColor() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        view.toolbar.onTool?(.numberStamp)
+        view.toolbar.onStyle?(AnnotationStyle(color: .blue))
+        for x in [80, 130, 180] {
+            view.mouseDown(with: mouse(.leftMouseDown, x: CGFloat(x), y: 100))
+            view.mouseUp(with: mouse(.leftMouseUp, x: CGFloat(x), y: 100))
+            view.toolbar.onTool?(.pen)
+            view.toolbar.onTool?(.numberStamp)
+        }
+        XCTAssertEqual(document.annotations.map(\.number), [1, 2, 3])
+        XCTAssertTrue(document.annotations.allSatisfy { $0.style.color == .blue })
+        let size = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+            .first { $0.accessibilityLabel() == "Stamp size" })
+        XCTAssertFalse(size.isHidden)
+        XCTAssertEqual(size.indexOfSelectedItem, 1)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 230, y: 100))
+        view.keyDown(with: escape())
+        view.mouseUp(with: mouse(.leftMouseUp, x: 230, y: 100))
+        XCTAssertEqual(document.annotations.count, 3)
+        view.toolbar.onUndo?()
+        XCTAssertEqual(document.nextStampNumber, 3)
+        view.toolbar.onRedo?()
+        XCTAssertEqual(document.nextStampNumber, 4)
+        let first = try XCTUnwrap(document.annotations.first)
+        view.toolbar.onTool?(.select)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 100))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 100, y: 120))
+        XCTAssertEqual(document.annotations.first, first.moved(by: CGPoint(x: 20, y: 20)))
+        view.toolbar.onStyle?(AnnotationStyle(color: .green))
+        XCTAssertEqual(document.annotations.first?.style.color, .green)
+        XCTAssertEqual(document.annotations.first?.number, 1)
+        view.toolbar.onUndo?()
+        XCTAssertEqual(document.annotations.first?.style.color, .blue)
+        view.toolbar.onTool?(.select)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 100, y: 120))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 100, y: 120))
+        size.selectItem(at: 2)
+        size.sendAction(size.action!, to: size.target)
+        XCTAssertEqual(document.annotations.first?.bounds.width, 40)
+        XCTAssertEqual(document.annotations.first?.bounds.midX, first.bounds.midX + 20)
+        XCTAssertEqual(document.annotations.first?.number, 1)
+        view.toolbar.onUndo?()
+        XCTAssertEqual(document.annotations.first?.bounds.width, 32)
+        view.toolbar.onTool?(.numberStamp)
+        size.selectItem(at: 0)
+        size.sendAction(size.action!, to: size.target)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 230, y: 100))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 230, y: 100))
+        XCTAssertEqual(document.annotations.last?.bounds.width, 24)
+        XCTAssertEqual(document.annotations.last?.number, 4)
+        view.toolbar.onTool?(.pen)
+        XCTAssertTrue(size.isHidden)
+        view.toolbar.onTool?(.numberStamp)
+        XCTAssertEqual(size.indexOfSelectedItem, 0)
+        view.clearAnnotations()
+        view.toolbar.onTool?(.numberStamp)
+        XCTAssertEqual(document.nextStampNumber, 1)
+    }
+
+    @MainActor
     func testSelectionCanExportImmediatelyWithoutShowingAnnotationToolbar() async throws {
         let (window, view, _) = try fixture()
         defer { window.close() }

@@ -60,7 +60,7 @@ struct TutorialStep {
                      detail: "Open the Snap menu and choose “Sign in with Google…”. Click the Google sign-in button, then finish signing in in your browser.",
                      tip: "After a capture, click the cloud-arrow icon for “Upload & Copy Link”. Screenshots go to Snap Screenshots in your Drive; anyone with a screenshot’s link can view it."),
         TutorialStep(title: "Make your point with annotations",
-                     detail: "Choose a drawing or text tool from the tool menu. Rectangle and Ellipse offer outline or filled styles. Choose “Blur” and drag over an area; adjust it with the strength slider. Other marks use color, line width, or text size.",
+                     detail: "Choose a tool from the tool menu. Rectangle and Ellipse offer outline or filled styles. With “Blur”, drag over an area and adjust its strength. With “Number stamps”, click to place colored circles with white numbers: 1, 2, 3… Other marks use color, line width, or text size.",
                      tip: "“Select” moves or deletes marks; double-click text to edit it. Use ⌘Z to undo and ⌘⇧Z to redo."),
         TutorialStep(title: "Switch tools without slowing down",
                      detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools, or Shift+Tab to cycle backward.",

@@ -3,6 +3,47 @@ import AppKit
 import ImageIO
 
 final class AnnotationRendererTests: XCTestCase {
+    func testStampSizeChangesExportedCircleAtBothScales() throws {
+        for scale in [1, 2] {
+            for diameter in [24, 32, 40] {
+                let stamp = Annotation(tool: .numberStamp, points: [CGPoint(x: 50, y: 40)],
+                                       style: AnnotationStyle(color: .blue, stampDiameter: CGFloat(diameter)), number: 2)
+                let image = try ScreenshotExporter.compose(image: background(width: 100 * scale, height: 80 * scale),
+                    selection: CGRect(x: 0, y: 0, width: 100, height: 80),
+                    logicalSize: CGSize(width: 100, height: 80), annotations: [stamp])
+                let inside = try pixel(image, x: (50 + diameter / 2 - 2) * scale, yFromBottom: 40 * scale)
+                XCTAssertLessThan(inside[0], 40)
+                XCTAssertGreaterThan(inside[2], 240)
+                XCTAssertEqual(try pixel(image, x: (50 + diameter / 2 + 2) * scale, yFromBottom: 40 * scale),
+                               [255, 255, 255, 255])
+            }
+        }
+    }
+
+    func testNumberStampsExportColoredCirclesWithWhiteDigitsAtBothScales() throws {
+        for scale in [1, 2] {
+            for number in [1, 12, 123] {
+                let stamp = Annotation(tool: .numberStamp, points: [CGPoint(x: 50, y: 40)],
+                                       style: AnnotationStyle(color: .blue), number: number)
+                let image = try ScreenshotExporter.compose(image: background(width: 100 * scale, height: 80 * scale),
+                    selection: CGRect(x: 0, y: 0, width: 100, height: 80),
+                    logicalSize: CGSize(width: 100, height: 80), annotations: [stamp])
+                let fill = try pixel(image, x: 50 * scale, yFromBottom: 27 * scale)
+                XCTAssertLessThan(fill[0], 40)
+                XCTAssertGreaterThan(fill[2], 240)
+                XCTAssertEqual(try pixel(image, x: 35 * scale, yFromBottom: 25 * scale), [255, 255, 255, 255])
+                var whiteGlyphPixels = 0
+                for y in (34 * scale)..<(46 * scale) {
+                    for x in (38 * scale)..<(62 * scale) {
+                        let color = try pixel(image, x: x, yFromBottom: y)
+                        if color[0] > 240 && color[1] > 240 && color[2] > 240 { whiteGlyphPixels += 1 }
+                    }
+                }
+                XCTAssertGreaterThan(whiteGlyphPixels, 8 * scale)
+            }
+        }
+    }
+
     func testShapeFillUsesSelectedColorAndPreservesOutlineAtBothScales() throws {
         for scale in [1, 2] {
             for tool in [AnnotationTool.rectangle, .ellipse] {

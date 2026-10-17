@@ -27,6 +27,7 @@ final class CaptureToolbar: NSView {
     private let fontSize = NSPopUpButton()
     private let blurLevel = NSSlider(value: 3.5, minValue: 1, maxValue: 12, target: nil, action: nil)
     private let blurValue = NSTextField(labelWithString: "3.5")
+    private let stampSize = NSPopUpButton()
     private var exporting = false
     private var canUndo = false
     private var canRedo = false
@@ -46,7 +47,7 @@ final class CaptureToolbar: NSView {
         layer?.cornerRadius = 12
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
-        let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat", "drop.halffull"]
+        let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat", "drop.halffull", "1.circle.fill"]
         popup(tool, labels: AnnotationTool.allCases.map(\.rawValue), images: symbols.map { toolIcon($0) },
               x: 30, label: "Drawing tool", action: #selector(toolChanged))
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: .rectangle)!)
@@ -77,6 +78,10 @@ final class CaptureToolbar: NSView {
         editingControls.append(blurLevel)
         addSubview(blurLevel); addSubview(blurValue)
         setBlurLevel(3.5)
+        let stampLabels = ["Small stamps", "Medium stamps", "Large stamps"]
+        popup(stampSize, labels: stampLabels, images: [CGFloat(8), 12, 16].map { stampSizeIcon($0) },
+              x: 126, label: "Stamp size", action: #selector(styleChanged))
+        for (item, label) in zip(stampSize.itemArray, stampLabels) { item.title = label }
         setContextualTool(.rectangle)
         undoButton = button("Undo", symbol: "arrow.uturn.backward", x: 184, action: #selector(undo))
         redoButton = button("Redo", symbol: "arrow.uturn.forward", x: 218, action: #selector(redo))
@@ -234,6 +239,7 @@ final class CaptureToolbar: NSView {
         shapeStyle.selectItem(at: style.isFilled ? 3 : width.indexOfSelectedItem)
         fontSize.selectItem(at: [CGFloat(16), 24, 32].firstIndex(of: style.fontSize) ?? 1)
         setBlurLevel(style.blurRadius)
+        stampSize.selectItem(at: [CGFloat(24), 32, 40].firstIndex(of: style.stampDiameter) ?? 1)
     }
 
     private func popup(_ control: NSPopUpButton, labels: [String], images: [NSImage?],
@@ -342,6 +348,17 @@ final class CaptureToolbar: NSView {
         }
     }
 
+    private func stampSizeIcon(_ diameter: CGFloat) -> NSImage {
+        let image = NSImage(size: CGSize(width: 24, height: 28), flipped: false) { _ in
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: CGRect(x: (24 - diameter) / 2, y: (28 - diameter) / 2,
+                                       width: diameter, height: diameter)).fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     @objc private func toolChanged() {
         hideHoverHint()
         let selected = AnnotationTool.allCases[tool.indexOfSelectedItem]
@@ -355,7 +372,8 @@ final class CaptureToolbar: NSView {
     }
     func setContextualTool(_ selected: AnnotationTool) {
         let isShape = selected == .rectangle || selected == .ellipse
-        width.isHidden = isShape || selected == .text || selected == .blur
+        width.isHidden = isShape || selected == .text || selected == .blur || selected == .numberStamp
+        stampSize.isHidden = selected != .numberStamp
         shapeStyle.isHidden = !isShape
         if isShape {
             for (index, thickness) in [CGFloat(2), 4, 8, 0].enumerated() {
@@ -382,7 +400,8 @@ final class CaptureToolbar: NSView {
                                  width: [2, 4, 8][width.indexOfSelectedItem],
                                  fontSize: [16, 24, 32][fontSize.indexOfSelectedItem],
                                  blurRadius: CGFloat(blurLevel.doubleValue),
-                                 isFilled: shapeStyle.indexOfSelectedItem == 3))
+                                 isFilled: shapeStyle.indexOfSelectedItem == 3,
+                                 stampDiameter: [24, 32, 40][stampSize.indexOfSelectedItem]))
     }
     @objc private func shapeStyleChanged() {
         if shapeStyle.indexOfSelectedItem < 3 { width.selectItem(at: shapeStyle.indexOfSelectedItem) }

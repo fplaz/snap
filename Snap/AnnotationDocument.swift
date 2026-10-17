@@ -6,6 +6,9 @@ final class AnnotationDocument {
     private var redoStates: [[Annotation]] = []
     var canUndo: Bool { !undoStates.isEmpty }
     var canRedo: Bool { !redoStates.isEmpty }
+    var nextStampNumber: Int {
+        (annotations.filter { $0.tool == .numberStamp }.map(\.number).max() ?? 0) + 1
+    }
 
     func set(_ values: [Annotation]) {
         guard values != annotations else { return }

@@ -3,7 +3,7 @@ import AppKit
 enum AnnotationTool: String, CaseIterable, Codable {
     case select = "Select", pen = "Pen", arrow = "Arrow", line = "Line"
     case rectangle = "Rectangle", ellipse = "Ellipse", text = "Text"
-    case blur = "Blur"
+    case blur = "Blur", numberStamp = "Number stamps"
 }
 
 enum AnnotationColor: String, CaseIterable, Codable {
@@ -27,6 +27,19 @@ struct AnnotationStyle: Equatable, Codable {
     var fontSize: CGFloat = 24
     var blurRadius: CGFloat = 3.5
     var isFilled = false
+    var stampDiameter: CGFloat = 32
+}
+
+extension AnnotationStyle {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        color = try values.decode(AnnotationColor.self, forKey: .color)
+        width = try values.decode(CGFloat.self, forKey: .width)
+        fontSize = try values.decode(CGFloat.self, forKey: .fontSize)
+        blurRadius = try values.decode(CGFloat.self, forKey: .blurRadius)
+        isFilled = try values.decode(Bool.self, forKey: .isFilled)
+        stampDiameter = try values.decodeIfPresent(CGFloat.self, forKey: .stampDiameter) ?? 32
+    }
 }
 
 struct Annotation: Equatable, Identifiable {
@@ -36,9 +49,14 @@ struct Annotation: Equatable, Identifiable {
     var style = AnnotationStyle()
     var text = ""
     var textRect = CGRect.zero
+    var number = 1
 
     var bounds: CGRect {
         if tool == .text { return textRect }
+        if tool == .numberStamp, let center = points.first {
+            return CGRect(x: center.x - style.stampDiameter / 2, y: center.y - style.stampDiameter / 2,
+                          width: style.stampDiameter, height: style.stampDiameter)
+        }
         guard let first = points.first else { return .zero }
         let xs = points.map(\.x), ys = points.map(\.y)
         return CGRect(x: xs.min() ?? first.x, y: ys.min() ?? first.y,
@@ -48,6 +66,7 @@ struct Annotation: Equatable, Identifiable {
 
     var isEmpty: Bool {
         if tool == .text { return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if tool == .numberStamp { return points.isEmpty }
         guard let first = points.first, let last = points.last else { return true }
         if tool == .pen { return !points.contains(where: { $0 != first }) }
         if tool == .rectangle || tool == .ellipse || tool == .blur { return bounds.width == 0 || bounds.height == 0 }
@@ -64,6 +83,8 @@ struct Annotation: Equatable, Identifiable {
     func hitTest(_ point: CGPoint) -> Bool {
         let tolerance = max(5, style.width / 2 + 3)
         switch tool {
+        case .numberStamp:
+            return !isEmpty && hypot(point.x - bounds.midX, point.y - bounds.midY) <= style.stampDiameter / 2
         case .blur: return bounds.contains(point)
         case .text: return textRect.contains(point)
         case .rectangle:
