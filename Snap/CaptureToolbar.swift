@@ -30,6 +30,14 @@ final class CaptureToolbar: NSView {
     private var exporting = false
     private var canUndo = false
     private var canRedo = false
+    private var hoverTracking: NSTrackingArea?
+    private weak var hoveredControl: NSControl?
+    private var tooltipTask: Task<Void, Never>?
+    private let hoverHint = ToolbarHoverHint()
+
+    override var isHidden: Bool {
+        didSet { if isHidden { hideHoverHint() } }
+    }
 
     init() {
         super.init(frame: CGRect(origin: .zero, size: Self.preferredSize))
@@ -73,11 +81,14 @@ final class CaptureToolbar: NSView {
         undoButton = button("Undo", symbol: "arrow.uturn.backward", x: 184, action: #selector(undo))
         redoButton = button("Redo", symbol: "arrow.uturn.forward", x: 218, action: #selector(redo))
         undoButton.toolTip = "Undo (⌘Z)"; redoButton.toolTip = "Redo (⌘⇧Z)"
-        _ = button("Copy", symbol: "doc.on.doc", x: 266, action: #selector(copyImage))
-        _ = button("Save", symbol: "square.and.arrow.down", x: 300, action: #selector(saveImage))
+        let copy = button("Copy", symbol: "doc.on.doc", x: 266, action: #selector(copyImage))
+        copy.toolTip = "Copy (⌘C)"
+        let save = button("Save", symbol: "square.and.arrow.down", x: 300, action: #selector(saveImage))
+        save.toolTip = "Save (⌘S)"
         uploadButton = button("Upload & Copy Link", symbol: "icloud.and.arrow.up", x: 334, action: #selector(upload))
         _ = button("Clear Annotations", symbol: "arrow.counterclockwise", x: 368, action: #selector(startOver))
         let cancel = button("Cancel", symbol: "xmark", x: 402, action: #selector(cancel))
+        cancel.toolTip = "Cancel (Esc)"
         editingControls.removeAll { $0 === cancel }
         toolTip = "Drag the six-dot handle to move the toolbar"
         setUploadAvailability(false, hint: "Sign in from the Snap menu to upload")
@@ -86,6 +97,57 @@ final class CaptureToolbar: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let tracking = NSTrackingArea(rect: .zero,
+            options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited], owner: self)
+        addTrackingArea(tracking)
+        hoverTracking = tracking
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        hideHoverHint()
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func mouseEntered(with event: NSEvent) { updateHoverHint(with: event) }
+    override func mouseMoved(with event: NSEvent) { updateHoverHint(with: event) }
+    override func mouseExited(with event: NSEvent) { hideHoverHint() }
+
+    private func updateHoverHint(with event: NSEvent) {
+        guard !isHidden, !exporting, dragOrigin == nil else { hideHoverHint(); return }
+        let point = convert(event.locationInWindow, from: nil)
+        let control = subviews.compactMap { $0 as? NSControl }.first {
+            !$0.isHidden && $0.frame.contains(point) && $0.toolTip != nil
+        }
+        guard control !== hoveredControl else { return }
+        hideHoverHint()
+        guard let control else { return }
+        hoveredControl = control
+        tooltipTask = Task { @MainActor [weak self, weak control] in
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard let self, let control, self.hoveredControl === control,
+                  !self.isHidden, let parent = self.superview, let text = control.toolTip else { return }
+            self.hoverHint.setText(text, maxWidth: parent.bounds.width - 8)
+            let target = self.convert(control.bounds, from: control).offsetBy(dx: self.frame.minX, dy: self.frame.minY)
+            let size = self.hoverHint.frame.size
+            let x = min(max(parent.bounds.minX + 4, target.midX - size.width / 2),
+                        max(parent.bounds.minX + 4, parent.bounds.maxX - size.width - 4))
+            let below = self.frame.minY - size.height - 6
+            let y = below >= parent.bounds.minY + 4 ? below : self.frame.maxY + 6
+            self.hoverHint.frame.origin = CGPoint(x: x, y: min(y, parent.bounds.maxY - size.height - 4))
+            parent.addSubview(self.hoverHint, positioned: .above, relativeTo: self)
+        }
+    }
+
+    private func hideHoverHint() {
+        tooltipTask?.cancel()
+        tooltipTask = nil
+        hoveredControl = nil
+        hoverHint.removeFromSuperview()
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let shape = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
@@ -121,6 +183,7 @@ final class CaptureToolbar: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        hideHoverHint()
         guard !exporting else { return }
         dragOrigin = event.locationInWindow
         originalOrigin = frame.origin
@@ -157,6 +220,7 @@ final class CaptureToolbar: NSView {
     }
 
     func setExporting(_ exporting: Bool) {
+        hideHoverHint()
         self.exporting = exporting
         dragOrigin = nil
         editingControls.forEach { $0.isEnabled = !exporting }
@@ -279,6 +343,7 @@ final class CaptureToolbar: NSView {
     }
 
     @objc private func toolChanged() {
+        hideHoverHint()
         let selected = AnnotationTool.allCases[tool.indexOfSelectedItem]
         setTool(selected)
         onTool?(selected)
@@ -286,7 +351,7 @@ final class CaptureToolbar: NSView {
     func setTool(_ selected: AnnotationTool) {
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
         setContextualTool(selected)
-        tool.toolTip = "\(selected.rawValue) · Tab: next tool · Shift+Tab: previous tool · Hold Space: Select"
+        tool.toolTip = "Tool"
     }
     func setContextualTool(_ selected: AnnotationTool) {
         let isShape = selected == .rectangle || selected == .ellipse
@@ -304,13 +369,14 @@ final class CaptureToolbar: NSView {
     private func setBlurLevel(_ value: CGFloat) {
         blurLevel.doubleValue = Double(value)
         blurValue.stringValue = String(format: "%.1f", blurLevel.doubleValue)
-        blurLevel.toolTip = "Blur strength: \(blurValue.stringValue) · 1 (light) to 12 (strong)"
+        blurLevel.toolTip = "Blur strength"
     }
     @objc private func blurChanged() {
         setBlurLevel(CGFloat((blurLevel.doubleValue * 2).rounded() / 2))
         styleChanged()
     }
     @objc private func styleChanged() {
+        hideHoverHint()
         if shapeStyle.indexOfSelectedItem != 3 { shapeStyle.selectItem(at: width.indexOfSelectedItem) }
         onStyle?(AnnotationStyle(color: AnnotationColor.allCases[color.indexOfSelectedItem],
                                  width: [2, 4, 8][width.indexOfSelectedItem],
@@ -322,11 +388,45 @@ final class CaptureToolbar: NSView {
         if shapeStyle.indexOfSelectedItem < 3 { width.selectItem(at: shapeStyle.indexOfSelectedItem) }
         styleChanged()
     }
-    @objc private func undo() { onUndo?() }
-    @objc private func redo() { onRedo?() }
-    @objc private func copyImage() { onCopy?() }
-    @objc private func upload() { onUpload?() }
-    @objc private func saveImage() { onSave?() }
-    @objc private func startOver() { onStartOver?() }
-    @objc private func cancel() { onCancel?() }
+    @objc private func undo() { hideHoverHint(); onUndo?() }
+    @objc private func redo() { hideHoverHint(); onRedo?() }
+    @objc private func copyImage() { hideHoverHint(); onCopy?() }
+    @objc private func upload() { hideHoverHint(); onUpload?() }
+    @objc private func saveImage() { hideHoverHint(); onSave?() }
+    @objc private func startOver() { hideHoverHint(); onStartOver?() }
+    @objc private func cancel() { hideHoverHint(); onCancel?() }
+}
+
+@MainActor
+private final class ToolbarHoverHint: NSView {
+    private let label = NSTextField(labelWithString: "")
+
+    init() {
+        super.init(frame: .zero)
+        appearance = NSAppearance(named: .darkAqua)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(white: 0.12, alpha: 1).cgColor
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .white
+        label.maximumNumberOfLines = 0
+        label.cell?.wraps = true
+        label.cell?.usesSingleLineMode = false
+        addSubview(label)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    func setText(_ text: String, maxWidth: CGFloat) {
+        label.stringValue = text
+        let width = max(1, maxWidth - 18)
+        let size = label.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: width, height: 10_000)) ?? .zero
+        label.frame.size = CGSize(width: min(width, size.width), height: size.height)
+        label.frame.origin = CGPoint(x: 9, y: 5)
+        frame.size = CGSize(width: label.frame.width + 18, height: label.frame.height + 10)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

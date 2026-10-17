@@ -36,7 +36,7 @@ final class UploadCoordinator: ObservableObject {
         if store == nil { return "Local upload storage is unavailable. Local Copy and Save still work." }
         if isWorking || staging { return "An upload is in progress. Please wait." }
         if pending != nil { return "Resolve the pending upload in My Screenshots" }
-        return "Upload & Copy Link — anyone with the link can view"
+        return "Upload & Copy Link"
     }
 
     func accountChanged() {

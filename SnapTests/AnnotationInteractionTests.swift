@@ -176,6 +176,36 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
+    func testToolbarHoverHintsShowShortcutsAndDismissWithoutInterceptingClicks() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.toolbar.frame.origin = CGPoint(x: 0, y: 0)
+        let hover = mouse(.mouseMoved, x: 282, y: 26)
+        view.toolbar.mouseMoved(with: hover)
+        try await Task.sleep(for: .milliseconds(450))
+        let hint = try XCTUnwrap(view.subviews.first { candidate in
+            candidate.subviews.contains { ($0 as? NSTextField)?.stringValue == "Copy (⌘C)" }
+        })
+        XCTAssertTrue(view.bounds.contains(hint.frame))
+        XCTAssertNil(hint.hitTest(hint.frame.origin))
+        view.toolbar.mouseMoved(with: mouse(.mouseMoved, x: 316, y: 26))
+        XCTAssertNil(hint.superview)
+        view.toolbar.mouseExited(with: mouse(.mouseMoved, x: 316, y: 60))
+        try await Task.sleep(for: .milliseconds(450))
+        XCTAssertNil(hint.superview)
+        view.toolbar.mouseMoved(with: hover)
+        try await Task.sleep(for: .milliseconds(450))
+        XCTAssertTrue(hint.superview === view)
+        view.toolbar.setExporting(true)
+        XCTAssertNil(hint.superview)
+        view.toolbar.setExporting(false)
+        view.toolbar.mouseMoved(with: hover)
+        try await Task.sleep(for: .milliseconds(450))
+        view.toolbar.isHidden = true
+        XCTAssertNil(hint.superview)
+    }
+
+    @MainActor
     func testConfiguredCaptureDefaultsAndLastUsedToolbarChoices() async throws {
         let suite = "SnapToolbarSettingsTests.\(UUID().uuidString)"
         let storage = try XCTUnwrap(UserDefaults(suiteName: suite))
