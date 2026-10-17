@@ -65,6 +65,8 @@ On first launch, a five-step tutorial covers capture, moving and resizing the ar
 3. Drag a rectangular area. Each display is frozen before the overlay appears; the selected area is undimmed.
 4. Click **Copy** (⌘C), **Save** (⌘S), or **Cancel** (Escape).
 
+For a quick copy, press **⌘⇧6** or choose **Take screenshot and copy** from the Snap menu. Drag to select an area; releasing the mouse copies it immediately and closes capture, skipping the annotation toolbar. Escape cancels capture. **⌘⇧7** keeps the usual annotation workflow.
+
 After selection, drawing keeps the crop fixed. Use **Clear Annotations** to immediately remove all drawing and text while keeping the selected area and toolbar open. Selection stays within the display where the drag starts. Canceling the native save panel keeps the screenshot and annotations available. Copy or successful save ends capture and returns focus to your previous app.
 
 ## Annotate
@@ -85,7 +87,7 @@ Escape first cancels an unfinished drawing, then clears a selected mark, then ca
 
 Snap captures only when invoked. It does not continuously record or upload screenshots. Exports preserve the source image's pixel resolution, including Retina scaling.
 
-If another app owns ⌘⇧7, Snap shows a shortcut warning in its menu; **Take Screenshot** still works. Shortcut customization is deferred.
+If another app owns ⌘⇧7 or ⌘⇧6, the corresponding Snap menu item shows a shortcut warning in its tooltip; both menu actions still work. Shortcut customization is deferred.
 
 For isolated cloud validation before provisioning is configured, build/test without signing into a separate product directory:
 

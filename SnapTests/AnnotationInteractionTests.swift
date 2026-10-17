@@ -3,6 +3,29 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testSelectionCanExportImmediatelyWithoutShowingAnnotationToolbar() async throws {
+        let (window, view, _) = try fixture()
+        defer { window.close() }
+        view.clearSelection()
+        var selected: CGRect?
+        var readyForCopy = false
+        view.onSelect = { rectangle in
+            selected = rectangle
+            readyForCopy = view.prepareForExport()
+            view.isExporting = true
+        }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 180, y: 180))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 80, y: 80))
+        XCTAssertEqual(selected, CGRect(x: 80, y: 80, width: 100, height: 100))
+        XCTAssertTrue(readyForCopy)
+        XCTAssertTrue(view.toolbar.isHidden)
+        XCTAssertTrue(view.exportAnnotations.isEmpty)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 100, y: 100))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 150, y: 150))
+        XCTAssertTrue(view.exportAnnotations.isEmpty)
+    }
+
+    @MainActor
     func testFilledShapesCanBeCreatedMovedAndChangedToOutlinesWithUndo() async throws {
         for tool in [AnnotationTool.rectangle, .ellipse] {
             let (window, view, document) = try fixture()

@@ -51,7 +51,7 @@ struct TutorialStep {
 
     static let all: [TutorialStep] = [
         TutorialStep(title: "Take your first screenshot",
-                     detail: "Press ⌘⇧7, then drag to select an area. You can also choose “Take screenshot” from the Snap menu bar icon.",
+                     detail: "Press ⌘⇧7 to select an area and annotate it. Use ⌘⇧6 to select an area and copy it immediately. Both options are also in the Snap menu.",
                      tip: "Allow Screen Recording when macOS asks. Copy with ⌘C or save a PNG with ⌘S."),
         TutorialStep(title: "Adjust your screenshot area",
                      detail: "Drag any edge of the selected area to move it. Drag the bottom-right corner to resize it.",

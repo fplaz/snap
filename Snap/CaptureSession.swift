@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 
 struct CaptureSession {
+    enum Mode { case annotate, copy }
     enum Phase: Equatable { case idle, preparing, selecting, ready, exporting }
     struct Selection: Equatable {
         let displayID: CGDirectDisplayID
@@ -9,13 +10,15 @@ struct CaptureSession {
     }
 
     private(set) var phase: Phase = .idle
+    private(set) var mode: Mode = .annotate
     private(set) var id: UUID?
     private(set) var selection: Selection?
 
-    mutating func begin() -> UUID? {
+    mutating func begin(mode: Mode = .annotate) -> UUID? {
         guard phase == .idle else { return nil }
         let id = UUID()
         self.id = id
+        self.mode = mode
         phase = .preparing
         return id
     }
@@ -69,6 +72,7 @@ struct CaptureSession {
 
     mutating func cancel() {
         phase = .idle
+        mode = .annotate
         id = nil
         selection = nil
     }

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import Sparkle
 
@@ -13,6 +14,7 @@ final class StatusBarController: NSObject {
     private let updater: SPUStandardUpdaterController
     private var observers: [AnyCancellable] = []
     private var shortcut: GlobalShortcut?
+    private var copyShortcut: GlobalShortcut?
 
     init(capture: CaptureCoordinator, account: AccountController, uploads: UploadCoordinator,
          historyWindow: ScreenshotHistoryWindow, tutorial: TutorialWindow, updater: SPUStandardUpdaterController) {
@@ -23,9 +25,12 @@ final class StatusBarController: NSObject {
         if let button = item.button {
             button.image = Self.menuBarIcon()
             button.imageScaling = .scaleNone
-            button.toolTip = "Snap — ⌘⇧7"
+            button.toolTip = "Snap — ⌘⇧7 annotate · ⌘⇧6 copy"
         }
         shortcut = GlobalShortcut { [weak capture] in capture?.start() }
+        copyShortcut = GlobalShortcut(keyCode: UInt32(kVK_ANSI_6), identifier: 3) { [weak capture] in
+            capture?.start(mode: .copy)
+        }
         for publisher in [account.objectWillChange, uploads.objectWillChange] {
             observers.append(publisher.sink { [weak self] in DispatchQueue.main.async { self?.rebuildMenu() } })
         }
@@ -92,6 +97,13 @@ final class StatusBarController: NSObject {
             take.toolTip = "⌘⇧7 unavailable — use this menu item"
         }
         menu.addItem(take)
+        let copy = NSMenuItem(title: "Take screenshot and copy", action: #selector(takeScreenshotAndCopy), keyEquivalent: "6")
+        copy.keyEquivalentModifierMask = [.command, .shift]
+        copy.target = self
+        if copyShortcut?.registrationStatus != noErr {
+            copy.toolTip = "⌘⇧6 unavailable — use this menu item"
+        }
+        menu.addItem(copy)
         let history = NSMenuItem(title: "My screenshots", action: #selector(showHistory), keyEquivalent: "")
         history.target = self; history.isEnabled = account.id != nil
         menu.addItem(history)
@@ -115,6 +127,10 @@ final class StatusBarController: NSObject {
     @objc private func takeScreenshot() {
         // Let the status menu close before capturing the desktop.
         DispatchQueue.main.async { [weak self] in self?.capture.start() }
+    }
+
+    @objc private func takeScreenshotAndCopy() {
+        DispatchQueue.main.async { [weak self] in self?.capture.start(mode: .copy) }
     }
 
     @objc private func showHistory() {

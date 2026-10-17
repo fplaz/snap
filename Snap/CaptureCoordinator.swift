@@ -40,11 +40,11 @@ final class CaptureCoordinator {
         if let displayObserver { NotificationCenter.default.removeObserver(displayObserver) }
     }
 
-    func start() {
+    func start(mode: CaptureSession.Mode = .annotate) {
         guard session.phase == .idle else { return }
         let previous = NSWorkspace.shared.frontmostApplication
         guard ScreenPermission.ensureAccess() else { return }
-        guard let id = session.begin() else { return }
+        guard let id = session.begin(mode: mode) else { return }
         onCaptureStarted?()
         previousApplication = previous?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : previous
         let displays = NSScreen.screens.compactMap { screen -> ScreenCaptureService.Display? in
@@ -127,7 +127,11 @@ final class CaptureCoordinator {
             os_signpost(.end, log: log, name: "Release to toolbar", signpostID: signpost)
             return
         }
-        (panels[displayID]?.contentView as? CaptureOverlayView)?.showToolbar()
+        if session.mode == .copy {
+            copy()
+        } else {
+            (panels[displayID]?.contentView as? CaptureOverlayView)?.showToolbar()
+        }
         os_signpost(.end, log: log, name: "Release to toolbar", signpostID: signpost)
     }
 
@@ -253,6 +257,10 @@ final class CaptureCoordinator {
     private func exportFailed(_ error: Error, id: UUID) {
         guard session.isExporting(id) else { return }
         resumeExport(id)
+        // Keep Copy available for a retry if the immediate clipboard write failed.
+        if session.mode == .copy, let selection = session.selection {
+            (panels[selection.displayID]?.contentView as? CaptureOverlayView)?.showToolbar()
+        }
         if !(error is CancellationError) { showError(error) }
     }
 

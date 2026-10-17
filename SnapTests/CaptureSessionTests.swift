@@ -1,6 +1,45 @@
 import XCTest
 
 final class CaptureSessionTests: XCTestCase {
+    func testQuickCopyModeKeepsSelectionAndRejectsInvocationUntilFinished() throws {
+        var session = CaptureSession()
+        let id = try XCTUnwrap(session.begin(mode: .copy))
+        XCTAssertEqual(session.mode, .copy)
+        XCTAssertNil(session.begin(mode: .annotate))
+        XCTAssertEqual(session.mode, .copy)
+        XCTAssertTrue(session.prepared(id))
+        XCTAssertFalse(session.select(displayID: 2, rectangle: .zero))
+        XCTAssertEqual(session.phase, .selecting)
+        XCTAssertNil(session.beginExport())
+        let rectangle = CGRect(x: 10, y: 20, width: 200, height: 100)
+        XCTAssertTrue(session.select(displayID: 2, rectangle: rectangle))
+        XCTAssertEqual(session.beginExport(), id)
+        XCTAssertEqual(session.selection, CaptureSession.Selection(displayID: 2, rectangle: rectangle))
+        XCTAssertNil(session.begin(mode: .annotate))
+        XCTAssertEqual(session.mode, .copy)
+        XCTAssertTrue(session.resumeAfterExport(id))
+        XCTAssertEqual(session.mode, .copy)
+        XCTAssertEqual(session.beginExport(), id)
+        session.cancel()
+        XCTAssertFalse(session.isExporting(id))
+        XCTAssertEqual(session.mode, .annotate)
+        XCTAssertNotNil(session.begin())
+        XCTAssertEqual(session.mode, .annotate)
+    }
+
+    func testCancelQuickCopyDuringPreparationOrSelectionDoesNotLeakMode() throws {
+        for prepare in [false, true] {
+            var session = CaptureSession()
+            let id = try XCTUnwrap(session.begin(mode: .copy))
+            if prepare { XCTAssertTrue(session.prepared(id)) }
+            session.cancel()
+            XCTAssertFalse(session.prepared(id))
+            XCTAssertNil(session.selection)
+            XCTAssertNotNil(session.begin())
+            XCTAssertEqual(session.mode, .annotate)
+        }
+    }
+
     func testRepeatedInvocationKeepsOneSession() throws {
         var session = CaptureSession()
         let id = try XCTUnwrap(session.begin())
