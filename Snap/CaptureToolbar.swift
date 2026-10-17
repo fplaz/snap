@@ -38,7 +38,7 @@ final class CaptureToolbar: NSView {
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.white.withAlphaComponent(0.16).cgColor
         let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat", "drop.halffull"]
-        popup(tool, labels: AnnotationTool.allCases.map(\.rawValue), images: symbols.map { symbol($0) },
+        popup(tool, labels: AnnotationTool.allCases.map(\.rawValue), images: symbols.map { toolIcon($0) },
               x: 30, label: "Drawing tool", action: #selector(toolChanged))
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: .rectangle)!)
         popup(color, labels: AnnotationColor.allCases.map { $0.rawValue.capitalized },
@@ -192,6 +192,32 @@ final class CaptureToolbar: NSView {
     private func symbol(_ name: String) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+    }
+
+    private func toolIcon(_ name: String) -> NSImage? {
+        guard let symbol = symbol(name) else { return nil }
+        let size = CGSize(width: 24, height: 28)
+        let image = NSImage(size: size)
+        // Rasterize at fixed scales so AppKit's selection animation scales the whole
+        // centered canvas instead of asking the symbol to lay itself out again.
+        for scale in [1, 2] {
+            guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width) * scale, pixelsHigh: Int(size.height) * scale,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+                let context = NSGraphicsContext(bitmapImageRep: bitmap) else { continue }
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            context.cgContext.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+            symbol.draw(in: CGRect(x: (size.width - symbol.size.width) / 2,
+                                   y: (size.height - symbol.size.height) / 2,
+                                   width: symbol.size.width, height: symbol.size.height))
+            NSGraphicsContext.restoreGraphicsState()
+            bitmap.size = size
+            image.addRepresentation(bitmap)
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func lineIcon(_ thickness: CGFloat) -> NSImage {
