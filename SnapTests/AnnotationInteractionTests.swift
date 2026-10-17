@@ -3,6 +3,71 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testFilledShapesCanBeCreatedMovedAndChangedToOutlinesWithUndo() async throws {
+        for tool in [AnnotationTool.rectangle, .ellipse] {
+            let (window, view, document) = try fixture()
+            defer { window.close() }
+            view.toolbar.onTool?(tool)
+            let menus = view.toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+            let shapeStyle = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Shape style" })
+            let width = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Line width" })
+            XCTAssertFalse(shapeStyle.isHidden)
+            XCTAssertTrue(width.isHidden)
+            XCTAssertEqual(shapeStyle.indexOfSelectedItem, 1)
+            shapeStyle.selectItem(at: 3)
+            shapeStyle.sendAction(shapeStyle.action!, to: shapeStyle.target)
+            view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+            view.mouseUp(with: mouse(.leftMouseUp, x: 180, y: 180))
+            let original = try XCTUnwrap(document.annotations.first)
+            XCTAssertTrue(original.style.isFilled)
+            XCTAssertTrue(original.hitTest(CGPoint(x: 110, y: 110)))
+            XCTAssertFalse(original.hitTest(CGPoint(x: 40, y: 110)))
+            if tool == .ellipse { XCTAssertFalse(original.hitTest(CGPoint(x: 61, y: 61))) }
+            view.toolbar.onTool?(.select)
+            view.mouseDown(with: mouse(.leftMouseDown, x: 130, y: 130))
+            view.mouseUp(with: mouse(.leftMouseUp, x: 140, y: 140))
+            let moved = original.moved(by: CGPoint(x: 10, y: 10))
+            XCTAssertEqual(document.annotations, [moved])
+            XCTAssertFalse(shapeStyle.isHidden)
+            XCTAssertEqual(shapeStyle.indexOfSelectedItem, 3)
+            shapeStyle.selectItem(at: 2)
+            shapeStyle.sendAction(shapeStyle.action!, to: shapeStyle.target)
+            let outlined = try XCTUnwrap(document.annotations.first)
+            XCTAssertFalse(outlined.style.isFilled)
+            XCTAssertEqual(outlined.style.width, 8)
+            XCTAssertFalse(outlined.hitTest(CGPoint(x: 120, y: 120)))
+            document.undo(); XCTAssertEqual(document.annotations, [moved])
+            document.redo(); XCTAssertEqual(document.annotations, [outlined])
+            XCTAssertTrue(view.prepareForExport())
+            XCTAssertEqual(view.exportAnnotations, [outlined])
+        }
+    }
+
+    @MainActor
+    func testFilledShapeStyleSurvivesOtherToolsAndRestoresSelectedStyle() async throws {
+        let toolbar = CaptureToolbar()
+        let menus = toolbar.subviews.compactMap { $0 as? NSPopUpButton }
+        let shapeStyle = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Shape style" })
+        let width = try XCTUnwrap(menus.first { $0.accessibilityLabel() == "Line width" })
+        toolbar.setStyle(AnnotationStyle(width: 8, isFilled: true))
+        toolbar.setContextualTool(.pen)
+        XCTAssertTrue(shapeStyle.isHidden)
+        XCTAssertFalse(width.isHidden)
+        var style: AnnotationStyle?
+        toolbar.onStyle = { style = $0 }
+        width.selectItem(at: 0)
+        width.sendAction(width.action!, to: width.target)
+        XCTAssertEqual(style?.width, 2)
+        toolbar.setContextualTool(.ellipse)
+        XCTAssertFalse(shapeStyle.isHidden)
+        XCTAssertEqual(shapeStyle.indexOfSelectedItem, 3)
+        toolbar.setStyle(AnnotationStyle(width: 4))
+        XCTAssertEqual(shapeStyle.indexOfSelectedItem, 1)
+        toolbar.setExporting(true)
+        XCTAssertFalse(shapeStyle.isEnabled)
+    }
+
+    @MainActor
     func testBlurStrengthIsStoredPerAreaAndSelectedEditsCanBeUndone() async throws {
         let (window, view, document) = try fixture()
         defer { window.close() }

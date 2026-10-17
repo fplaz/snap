@@ -3,6 +3,31 @@ import AppKit
 import ImageIO
 
 final class AnnotationRendererTests: XCTestCase {
+    func testShapeFillUsesSelectedColorAndPreservesOutlineAtBothScales() throws {
+        for scale in [1, 2] {
+            for tool in [AnnotationTool.rectangle, .ellipse] {
+                var annotation = Annotation(tool: tool, points: [CGPoint(x: 20, y: 20), CGPoint(x: 80, y: 60)],
+                                            style: AnnotationStyle(color: .blue, width: 8, isFilled: true))
+                let source = try background(width: 100 * scale, height: 80 * scale)
+                let filled = try ScreenshotExporter.compose(image: source, selection: CGRect(x: 0, y: 0, width: 100, height: 80),
+                                                            logicalSize: CGSize(width: 100, height: 80), annotations: [annotation])
+                let center = try pixel(filled, x: 50 * scale, yFromBottom: 40 * scale)
+                XCTAssertLessThan(center[0], 40)
+                XCTAssertGreaterThan(center[2], 240)
+                XCTAssertEqual(center[3], 255)
+                XCTAssertEqual(try pixel(filled, x: 10 * scale, yFromBottom: 40 * scale), [255, 255, 255, 255])
+                if tool == .ellipse {
+                    XCTAssertEqual(try pixel(filled, x: 21 * scale, yFromBottom: 21 * scale), [255, 255, 255, 255])
+                }
+                annotation.style.isFilled = false
+                let outlined = try ScreenshotExporter.compose(image: source, selection: CGRect(x: 0, y: 0, width: 100, height: 80),
+                                                              logicalSize: CGSize(width: 100, height: 80), annotations: [annotation])
+                XCTAssertEqual(try pixel(outlined, x: 50 * scale, yFromBottom: 40 * scale), [255, 255, 255, 255])
+                XCTAssertEqual(try pixel(outlined, x: 50 * scale, yFromBottom: 20 * scale), center)
+            }
+        }
+    }
+
     func testDifferentBlurStrengthsRenderIndependently() throws {
         let context = try XCTUnwrap(CGContext(data: nil, width: 120, height: 100, bitsPerComponent: 8,
                                              bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),

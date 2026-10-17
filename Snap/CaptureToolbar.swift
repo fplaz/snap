@@ -23,6 +23,7 @@ final class CaptureToolbar: NSView {
     private let tool = NSPopUpButton()
     private let color = NSPopUpButton()
     private let width = NSPopUpButton()
+    private let shapeStyle = NSPopUpButton()
     private let fontSize = NSPopUpButton()
     private let blurLevel = NSSlider(value: 3.5, minValue: 1, maxValue: 12, target: nil, action: nil)
     private let blurValue = NSTextField(labelWithString: "3.5")
@@ -46,6 +47,12 @@ final class CaptureToolbar: NSView {
               x: 78, label: "Annotation color", action: #selector(styleChanged))
         popup(width, labels: ["Thin", "Medium", "Thick"], images: [2, 4, 8].map { lineIcon($0) },
               x: 126, label: "Line width", action: #selector(styleChanged))
+        let shapeLabels = ["Thin outline", "Medium outline", "Thick outline", "Filled"]
+        popup(shapeStyle, labels: shapeLabels,
+              images: [2, 4, 8, 0].map { shapeIcon(.rectangle, thickness: $0) },
+              x: 126, label: "Shape style", action: #selector(shapeStyleChanged))
+        for (item, label) in zip(shapeStyle.itemArray, shapeLabels) { item.title = label }
+        shapeStyle.selectItem(at: 1)
         popup(fontSize, labels: ["Small text", "Medium text", "Large text"],
               images: [12, 18, 24].map { textIcon($0) }, x: 126, label: "Text size", action: #selector(styleChanged))
         width.selectItem(at: 1); fontSize.selectItem(at: 1); fontSize.isHidden = true
@@ -159,6 +166,7 @@ final class CaptureToolbar: NSView {
     func setStyle(_ style: AnnotationStyle) {
         color.selectItem(at: AnnotationColor.allCases.firstIndex(of: style.color) ?? 0)
         width.selectItem(at: [CGFloat(2), 4, 8].firstIndex(of: style.width) ?? 1)
+        shapeStyle.selectItem(at: style.isFilled ? 3 : width.indexOfSelectedItem)
         fontSize.selectItem(at: [CGFloat(16), 24, 32].firstIndex(of: style.fontSize) ?? 1)
         setBlurLevel(style.blurRadius)
     }
@@ -231,6 +239,21 @@ final class CaptureToolbar: NSView {
         return image
     }
 
+    private func shapeIcon(_ tool: AnnotationTool, thickness: CGFloat) -> NSImage {
+        let image = NSImage(size: CGSize(width: 24, height: 28), flipped: false) { _ in
+            let rect = CGRect(x: 5, y: 7, width: 14, height: 14)
+            let path = tool == .ellipse ? NSBezierPath(ovalIn: rect) : NSBezierPath(rect: rect)
+            if thickness == 0 {
+                NSColor.white.setFill(); path.fill()
+            } else {
+                NSColor.white.setStroke(); path.lineWidth = thickness / 2; path.stroke()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     private func textIcon(_ size: CGFloat) -> NSImage {
         let image = NSImage(size: CGSize(width: 24, height: 28), flipped: false) { rect in
             let text = "A" as NSString
@@ -265,7 +288,15 @@ final class CaptureToolbar: NSView {
         tool.toolTip = "\(selected.rawValue) · Tab: next tool · Shift+Tab: previous tool · Hold Space: Select"
     }
     func setContextualTool(_ selected: AnnotationTool) {
-        width.isHidden = selected == .text || selected == .blur; fontSize.isHidden = selected != .text
+        let isShape = selected == .rectangle || selected == .ellipse
+        width.isHidden = isShape || selected == .text || selected == .blur
+        shapeStyle.isHidden = !isShape
+        if isShape {
+            for (index, thickness) in [CGFloat(2), 4, 8, 0].enumerated() {
+                shapeStyle.item(at: index)?.image = shapeIcon(selected, thickness: thickness)
+            }
+        }
+        fontSize.isHidden = selected != .text
         color.isHidden = selected == .blur
         blurLevel.isHidden = selected != .blur; blurValue.isHidden = selected != .blur
     }
@@ -279,10 +310,16 @@ final class CaptureToolbar: NSView {
         styleChanged()
     }
     @objc private func styleChanged() {
+        if shapeStyle.indexOfSelectedItem != 3 { shapeStyle.selectItem(at: width.indexOfSelectedItem) }
         onStyle?(AnnotationStyle(color: AnnotationColor.allCases[color.indexOfSelectedItem],
                                  width: [2, 4, 8][width.indexOfSelectedItem],
                                  fontSize: [16, 24, 32][fontSize.indexOfSelectedItem],
-                                 blurRadius: CGFloat(blurLevel.doubleValue)))
+                                 blurRadius: CGFloat(blurLevel.doubleValue),
+                                 isFilled: shapeStyle.indexOfSelectedItem == 3))
+    }
+    @objc private func shapeStyleChanged() {
+        if shapeStyle.indexOfSelectedItem < 3 { width.selectItem(at: shapeStyle.indexOfSelectedItem) }
+        styleChanged()
     }
     @objc private func undo() { onUndo?() }
     @objc private func redo() { onRedo?() }

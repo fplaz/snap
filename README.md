@@ -71,6 +71,8 @@ After selection, drawing keeps the crop fixed. Use **Clear Annotations** to imme
 
 Choose **Pen**, **Arrow**, **Line**, **Rectangle**, **Ellipse**, **Text**, or **Blur** in the toolbar. Color, stroke width, and text size apply to new marks. Drawing is clipped to the capture rectangle.
 
+With **Rectangle** or **Ellipse**, the shape style menu offers **Thin outline**, **Medium outline**, **Thick outline**, and **Filled**. Filled shapes use the selected color. Select an existing shape to change between outline and fill; filled shapes can be selected and moved by clicking anywhere inside them. Style changes support undo and redo.
+
 With **Blur**, drag a rectangle over text or another area of the screenshot. Adjust the toolbar's strength slider from 1 (light) to 12 (strong), in half-step increments; the default is 3.5. Each area keeps its own strength. Select an existing blur area to change its strength, move it, or delete it; undo and redo work as with other annotations. Blur previews while drawing and is included in Copy, Save, and uploads. It affects the screenshot beneath drawing and text annotations. Color and line width do not affect it.
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.

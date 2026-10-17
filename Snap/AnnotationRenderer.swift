@@ -64,7 +64,12 @@ enum AnnotationRenderer {
                     }
                 }
             }
-            path.stroke()
+            if annotation.style.isFilled && (annotation.tool == .rectangle || annotation.tool == .ellipse) {
+                annotation.style.color.nsColor.setFill()
+                path.fill()
+            } else {
+                path.stroke()
+            }
         }
     }
 

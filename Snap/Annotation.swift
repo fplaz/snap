@@ -26,6 +26,7 @@ struct AnnotationStyle: Equatable {
     var width: CGFloat = 4
     var fontSize: CGFloat = 24
     var blurRadius: CGFloat = 3.5
+    var isFilled = false
 }
 
 struct Annotation: Equatable, Identifiable {
@@ -67,6 +68,7 @@ struct Annotation: Equatable, Identifiable {
         case .text: return textRect.contains(point)
         case .rectangle:
             let r = bounds
+            if style.isFilled { return r.contains(point) }
             let corners = [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY),
                            CGPoint(x: r.maxX, y: r.maxY), CGPoint(x: r.minX, y: r.maxY),
                            CGPoint(x: r.minX, y: r.minY)]
@@ -75,6 +77,7 @@ struct Annotation: Equatable, Identifiable {
             let r = bounds
             guard r.width > 0, r.height > 0 else { return false }
             let x = (point.x - r.midX) / (r.width / 2), y = (point.y - r.midY) / (r.height / 2)
+            if style.isFilled { return x * x + y * y <= 1 }
             return abs(sqrt(x * x + y * y) - 1) * min(r.width, r.height) / 2 <= tolerance
         case .arrow:
             return Self.hitsSegments(points, point: point, tolerance: tolerance) ||
