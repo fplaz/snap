@@ -4,7 +4,7 @@ Snap uses Sparkle 2.10.0. While Snap is running, Sparkle checks the HTTPS feed a
 
 ## Hosting
 
-The feed is `https://fplaz.github.io/snap/appcast.xml`, served by GitHub Pages. Each published stable GitHub release must include both `Snap.dmg` and `appcast.xml`. The **Publish update feed** workflow downloads the latest stable release's signed feed and deploys it unchanged to Pages. GitHub serves these as static files; no application server or client registration is needed. Drafts and prereleases do not become the latest stable release.
+The feed is `https://fplaz.github.io/snap/appcast.xml`, served by GitHub Pages. Each published stable GitHub release must include both `SNAP.dmg` and `appcast.xml`. The **Publish update feed** workflow downloads the latest stable release's signed feed and deploys it unchanged to Pages. GitHub serves these as static files; no application server or client registration is needed. Drafts and prereleases do not become the latest stable release.
 
 To use another static HTTPS host, change `SNAP_UPDATE_FEED_URL` in `Configuration/Updates.xcconfig` **before distributing the app**. The `https:/$()/` syntax is intentional: it prevents xcconfig from interpreting `//` as a comment. Keep the feed URL stable across releases. Changing it later requires publishing a transition update at the old URL.
 
@@ -28,20 +28,20 @@ If this prints a different public key than the committed configuration, restore 
 
 1. Increment both `CFBundleShortVersionString` and `CFBundleVersion` in `Snap/Info.plist`. Build numbers must increase, including when only fixing packaging. Use a new version for changed release bytes.
 2. Write release notes in an HTML fragment, for example `<ul><li>Improved capture controls.</li></ul>`.
-3. Build the DMG and generate the signed feed. For version 1.3:
+3. Build the DMG and generate the signed feed. For version 1.5:
 
 ```sh
 bash scripts/build-dmg.sh
 bash scripts/generate-appcast.sh \
-  https://github.com/fplaz/snap/releases/download/v1.3/ \
+  https://github.com/fplaz/snap/releases/download/v1.5/ \
   /path/to/release-notes.html
 ```
 
 The download prefix must match the release tag, including its `v` prefix. Tools are resolved from the pinned Sparkle package. Preparation fails if the packaged public key differs from the Keychain key. Release notes are embedded in the signed feed, so there is no separate notes file to host. Full archives are used; delta updates are disabled for this initial integration.
 
-Upload-ready files are in `.build/distribution/publish/1.3/`: `Snap.dmg` and `appcast.xml`. Keep `.build/distribution/updates/` between releases: it retains versioned local archives and feed history. Only the current build's download URL changes to the fixed asset name; older entries keep their original URLs. The feed is re-signed after setting that URL. Do not edit signed XML after generation.
+Upload-ready files are in `.build/distribution/publish/1.5/`: `SNAP.dmg` and `appcast.xml`. Keep `.build/distribution/updates/` between releases: it retains versioned local archives and feed history. Only the current build's download URL changes to the fixed asset name; older entries keep their original URLs. The feed is re-signed after setting that URL. Do not edit signed XML after generation.
 
-Use `https://github.com/fplaz/snap/releases/latest/download/Snap.dmg` on your website. Appcast entries use immutable release URLs such as `https://github.com/fplaz/snap/releases/download/v1.3/Snap.dmg`, so each download matches the advertised version and signature. Never use the latest-release redirect in the feed. Each GitHub release needs only one DMG.
+Use `https://github.com/fplaz/snap/releases/latest/download/SNAP.dmg` on your website. Appcast entries use immutable release URLs such as `https://github.com/fplaz/snap/releases/download/v1.5/SNAP.dmg`, so each download matches the advertised version and signature. Never use the latest-release redirect in the feed. Each GitHub release needs only one DMG.
 
 ## Publish
 
@@ -49,7 +49,7 @@ In repository **Settings → Pages**, select **GitHub Actions** as the publishin
 
 The `github-pages` environment must also permit version **tags** matching `v*` for the release event to deploy. Its default `main` branch rule permits manual workflow runs from main but blocks release-tag runs. Changing this deployment permission requires the repository owner's approval.
 
-Create a GitHub release tagged `v1.3`, attach `Snap.dmg` and `appcast.xml` from the publish directory, and publish it as the latest stable release. Prepare uploads in a draft so the feed cannot advertise an unavailable download. The release event runs **Publish update feed**, deploying `appcast.xml` to GitHub Pages. The workflow can also be run manually to redeploy the latest stable release; it never deploys an older release selected by an event. Keep old release assets available because existing feed entries point to them.
+Create a GitHub release tagged `v1.5`, attach `SNAP.dmg` and `appcast.xml` from the publish directory, and publish it as the latest stable release. Prepare uploads in a draft so the feed cannot advertise an unavailable download. The release event runs **Publish update feed**, deploying `appcast.xml` to GitHub Pages. The workflow can also be run manually to redeploy the latest stable release; it never deploys an older release selected by an event. Keep old release assets available because existing feed entries point to them.
 
 Confirm the workflow succeeds and the Pages feed returns the exact signed bytes before announcing the release. Pages caching can delay availability of a changed feed.
 

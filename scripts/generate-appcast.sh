@@ -69,12 +69,12 @@ fi
 # Keep versioned local archives for feed history, but publish one fixed-name asset
 # inside each version's release. Older feed entries keep their existing URLs.
 python3 "$repo_root/scripts/set-appcast-download.py" "$archives/appcast.xml" \
-    "$build" "${download_url%/}/Snap.dmg"
+    "$build" "${download_url%/}/SNAP.dmg"
 "$bin/sign_update" --account cl.fplaz.snap "$archives/appcast.xml"
 "$bin/sign_update" --account cl.fplaz.snap --verify "$archives/appcast.xml"
 publish="$repo_root/.build/distribution/publish/$version"
 mkdir -p "$publish"
-cp "$dmg" "$publish/Snap.dmg"
+cp "$dmg" "$publish/SNAP.dmg"
 cp "$archives/appcast.xml" "$publish/appcast.xml"
 echo "Release files ready: $publish"
 echo 'Upload Snap.dmg and appcast.xml to the matching version release.'
