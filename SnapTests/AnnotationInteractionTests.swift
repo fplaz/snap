@@ -3,6 +3,217 @@ import AppKit
 
 final class AnnotationInteractionTests: XCTestCase {
     @MainActor
+    func testRepeatedCopyToastStaysVisibleUntilItsOwnTimeoutWithoutChangingEdits() async throws {
+        let (overlay, view, document) = try fixture()
+        defer { overlay.close() }
+        document.commit(Annotation(tool: .rectangle, points: [CGPoint(x: 40, y: 40), CGPoint(x: 90, y: 90)]))
+        let original = document.annotations
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        let root = try XCTUnwrap(editor.contentView)
+        func toasts() -> [NSView] {
+            root.subviews.filter { parent in
+                parent.subviews.contains { ($0 as? NSTextField)?.stringValue == "Screenshot copied" }
+            }
+        }
+        editor.showCopyToast()
+        XCTAssertEqual(toasts().count, 1)
+        root.layoutSubtreeIfNeeded()
+        let toast = try XCTUnwrap(toasts().first)
+        XCTAssertGreaterThanOrEqual(toast.frame.minY, root.bounds.minY + 23)
+        XCTAssertLessThanOrEqual(toast.frame.maxY, root.bounds.maxY - 52)
+        XCTAssertNil(toasts().first?.hitTest(.zero))
+        try await Task.sleep(for: .seconds(1))
+        editor.showCopyToast()
+        XCTAssertEqual(toasts().count, 1)
+        try await Task.sleep(for: .milliseconds(1200))
+        XCTAssertEqual(toasts().count, 1, "The earlier copy must not dismiss the latest toast")
+        try await Task.sleep(for: .milliseconds(1100))
+        XCTAssertTrue(toasts().isEmpty)
+        XCTAssertEqual(document.annotations, original)
+        XCTAssertTrue(document.canUndo)
+    }
+
+    @MainActor
+    func testEditorDoneConfirmsDiscardAndKeepEditingPreservesTheDocument() async throws {
+        let (overlay, view, document) = try fixture()
+        defer { overlay.close() }
+        document.commit(Annotation(tool: .rectangle, points: [CGPoint(x: 40, y: 40), CGPoint(x: 90, y: 90)]))
+        let original = document.annotations
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        var closeCount = 0
+        editor.onClose = { closeCount += 1 }
+        let done = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSButton }
+            .first { $0.accessibilityLabel() == "Done" })
+        XCTAssertEqual(done.attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, .white)
+        view.onCancel = { [weak editor] in editor?.requestClose() }
+        done.performClick(nil)
+        let sheet = try XCTUnwrap(editor.attachedSheet)
+        XCTAssertEqual(closeCount, 0)
+        editor.requestClose()
+        XCTAssertTrue(editor.attachedSheet === sheet)
+        let canceled = expectation(forNotification: NSWindow.didEndSheetNotification, object: editor)
+        XCTAssertTrue(sheet.performKeyEquivalent(with: escape()))
+        await fulfillment(of: [canceled], timeout: 2)
+        XCTAssertEqual(closeCount, 0)
+        XCTAssertEqual(document.annotations, original)
+        let discarded = expectation(description: "Discard confirmed")
+        editor.onClose = { closeCount += 1; discarded.fulfill() }
+        XCTAssertFalse(editor.windowShouldClose(editor))
+        let confirmation = try XCTUnwrap(editor.attachedSheet)
+        editor.endSheet(confirmation, returnCode: .alertSecondButtonReturn)
+        await fulfillment(of: [discarded], timeout: 2)
+        XCTAssertEqual(closeCount, 1)
+        editor.onClose = nil
+    }
+
+    @MainActor
+    func testEditorHeaderUsesArrowCursorAndDoesNotCloseDuringExport() async throws {
+        let (overlay, view, _) = try fixture()
+        defer { overlay.close() }
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        let root = try XCTUnwrap(editor.contentView)
+        let location = root.convert(CGPoint(x: 200, y: root.bounds.maxY - 26), to: nil)
+        NSCursor.crosshair.set()
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [],
+            timestamp: 0, windowNumber: editor.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+        editor.sendEvent(event)
+        XCTAssertEqual(NSCursor.current, .arrow)
+        view.isExporting = true
+        editor.requestClose()
+        XCTAssertNil(editor.attachedSheet)
+    }
+
+    @MainActor
+    func testEditorRendersOnlyTheSelectedAreaOfTheDisplay() async throws {
+        let source = try XCTUnwrap(CGContext(data: nil, width: 400, height: 300, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        source.setFillColor(NSColor.red.cgColor)
+        source.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        source.setFillColor(NSColor.blue.cgColor)
+        source.fill(CGRect(x: 100, y: 80, width: 120, height: 100))
+        let image = try XCTUnwrap(source.makeImage())
+        let view = CaptureOverlayView(snapshot: DisplaySnapshot(displayID: 1,
+            frame: CGRect(x: 0, y: 0, width: 400, height: 300), image: image), document: AnnotationDocument())
+        let overlay = CaptureOverlayPanel(frame: view.frame)
+        defer { overlay.close() }
+        overlay.contentView = view
+        view.onBeginSelection = { true }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 100, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 220, y: 180))
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        XCTAssertEqual(view.bounds, CGRect(x: 100, y: 80, width: 120, height: 100))
+        // Render into a larger workspace without relying on AppKit's implicit view clipping.
+        // The display outside the crop is red; the selected screenshot is blue.
+        let output = try XCTUnwrap(CGContext(data: nil, width: 200, height: 180, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        output.setFillColor(NSColor.black.cgColor)
+        output.fill(CGRect(x: 0, y: 0, width: 200, height: 180))
+        output.translateBy(x: -60, y: -40)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: output, flipped: false)
+        view.draw(view.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+        let rendered = NSBitmapImageRep(cgImage: try XCTUnwrap(output.makeImage()))
+        let center = try XCTUnwrap(rendered.colorAt(x: 100, y: 90)?.usingColorSpace(.deviceRGB))
+        XCTAssertGreaterThan(center.blueComponent, 0.9)
+        for point in [(20, 90), (180, 90), (100, 20), (100, 160)] {
+            let margin = try XCTUnwrap(rendered.colorAt(x: point.0, y: point.1)?.usingColorSpace(.deviceRGB))
+            XCTAssertLessThan(margin.redComponent, 0.01, "Display content must not appear outside the crop")
+            XCTAssertLessThan(margin.blueComponent, 0.01)
+        }
+    }
+
+    @MainActor
+    func testPopOutPreservesCoordinatesHistoryAndEditingAtCropEdges() async throws {
+        let (overlay, view, document) = try fixture()
+        defer { overlay.close() }
+        view.toolbar.onTool?(.rectangle)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+        view.mouseUp(with: mouse(.leftMouseUp, x: 140, y: 140))
+        let original = document.annotations
+        let crop = try XCTUnwrap(view.selection)
+        let exports = view.exportAnnotations
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        XCTAssertEqual(view.bounds, crop)
+        XCTAssertEqual(view.exportAnnotations, exports)
+        XCTAssertEqual(editor.level, .normal)
+        XCTAssertTrue(view.toolbar.isInEditor)
+        XCTAssertFalse(view.toolbar.isDescendant(of: view))
+        let segments = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSSegmentedControl }.first)
+        XCTAssertEqual(segments.segmentCount, AnnotationTool.allCases.count)
+        segments.selectedSegment = AnnotationTool.allCases.firstIndex(of: .pen)!
+        segments.sendAction(segments.action!, to: segments.target)
+        XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, segments.selectedSegment)
+        view.toolbar.onTool?(.rectangle)
+        let scroll = try XCTUnwrap(view.enclosingScrollView)
+        let visible = view.convert(scroll.contentView.bounds, from: scroll.contentView)
+        XCTAssertGreaterThanOrEqual(crop.minX - visible.minX, 47)
+        XCTAssertGreaterThanOrEqual(visible.maxX - crop.maxX, 47)
+        XCTAssertGreaterThanOrEqual(crop.minY - visible.minY, 47)
+        XCTAssertGreaterThanOrEqual(visible.maxY - crop.maxY, 47)
+        editor.setContentSize(CGSize(width: 860, height: 360))
+        editor.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: editor))
+        let resizedVisible = view.convert(scroll.contentView.bounds, from: scroll.contentView)
+        XCTAssertGreaterThanOrEqual((crop.minY - resizedVisible.minY) * scroll.magnification, 47)
+        XCTAssertGreaterThanOrEqual((resizedVisible.maxY - crop.maxY) * scroll.magnification, 47)
+        XCTAssertEqual(view.bounds, crop)
+        XCTAssertEqual(view.exportAnnotations, exports)
+        XCTAssertFalse(view.prepareForEditor())
+        view.toolbar.onUndo?()
+        XCTAssertTrue(document.annotations.isEmpty)
+        view.toolbar.onRedo?()
+        XCTAssertEqual(document.annotations, original)
+        // Window coordinates must be converted through the scroll view and crop origin.
+        func event(_ type: NSEvent.EventType, at point: CGPoint) -> NSEvent {
+            let location = view.convert(point, to: nil)
+            return mouse(type, x: location.x, y: location.y)
+        }
+        view.mouseDown(with: event(.leftMouseDown, at: CGPoint(x: crop.minX + 2, y: crop.minY + 2)))
+        view.mouseUp(with: event(.leftMouseUp, at: CGPoint(x: crop.minX + 50, y: crop.minY + 50)))
+        XCTAssertEqual(view.selection, crop)
+        XCTAssertEqual(document.annotations.count, 2)
+        let firstPoint = try XCTUnwrap(document.annotations.last?.points.first)
+        XCTAssertEqual(firstPoint.x, 2, accuracy: 0.001)
+        XCTAssertEqual(firstPoint.y, 2, accuracy: 0.001)
+        XCTAssertTrue(view.prepareForExport())
+        let tool = try toolPopup(view)
+        editor.makeFirstResponder(tool)
+        editor.sendEvent(key(48))
+        XCTAssertEqual(tool.indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: .ellipse))
+        view.clearAnnotations()
+        XCTAssertTrue(document.annotations.isEmpty)
+        XCTAssertEqual(view.selection, crop)
+    }
+
+    @MainActor
+    func testPopOutCommitsPendingTextAndRejectsActiveDrawing() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 80))
+        XCTAssertFalse(view.prepareForEditor())
+        view.keyDown(with: escape())
+        view.toolbar.onTool?(.text)
+        view.mouseDown(with: mouse(.leftMouseDown, x: 80, y: 180))
+        let text = try XCTUnwrap(view.subviews.compactMap { $0 as? AnnotationTextEditor }.first)
+        text.string = "Keep this text"
+        XCTAssertTrue(view.prepareForEditor())
+        XCTAssertEqual(document.annotations.last?.text, "Keep this text")
+        XCTAssertTrue(document.canUndo)
+    }
+
+    @MainActor
     func testNumberStampsAdvanceAcrossToolsAndSupportCancelUndoMoveAndColor() async throws {
         let (window, view, document) = try fixture()
         defer { window.close() }

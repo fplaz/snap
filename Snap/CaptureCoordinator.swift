@@ -8,12 +8,19 @@ import Combine
 final class CaptureCoordinator {
     var onCaptureStarted: (() -> Void)?
     var onCaptureEnded: (() -> Void)?
-    var isActive: Bool { session.phase != .idle }
+    var isActive: Bool { session.phase != .idle || !editors.isEmpty }
     private let uploads: UploadCoordinator?
     private let settings: AnnotationSettings
     private var uploadObservation: AnyCancellable?
     private var session = CaptureSession()
-    private let document = AnnotationDocument()
+    private var document = AnnotationDocument()
+    private var editorWindow: ScreenshotEditorWindow?
+    private var editors: [UUID: CaptureCoordinator] = [:]
+    private var activeView: CaptureOverlayView? {
+        if let editorWindow { return editorWindow.canvas }
+        guard let selection = session.selection else { return nil }
+        return panels[selection.displayID]?.contentView as? CaptureOverlayView
+    }
     private var snapshots: [CGDirectDisplayID: DisplaySnapshot] = [:]
     private var panels: [CGDirectDisplayID: CaptureOverlayPanel] = [:]
     private var preparation: Task<Void, Never>?
@@ -34,7 +41,10 @@ final class CaptureCoordinator {
         displayObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.cancel() }
+            Task { @MainActor in
+                guard let self, self.editorWindow == nil else { return }
+                self.cancel()
+            }
         }
     }
 
@@ -104,6 +114,7 @@ final class CaptureCoordinator {
             view.onSave = { [weak self] in self?.save() }
             view.onUpload = { [weak self] in self?.upload() }
             view.onStartOver = { [weak self] in self?.startOver() }
+            view.onPopOut = { [weak self] in self?.popOut() }
             panels[snapshot.displayID] = panel
         }
         refreshUploadAvailability()
@@ -143,26 +154,53 @@ final class CaptureCoordinator {
         }
         return try ScreenshotExporter.compose(image: snapshot.image, selection: selection.rectangle,
                                               logicalSize: snapshot.logicalSize,
-                                              annotations: (panels[selection.displayID]?.contentView as? CaptureOverlayView)?.exportAnnotations ?? document.annotations)
+                                              annotations: activeView?.exportAnnotations ?? document.annotations)
     }
 
     private func prepareOutput() -> Bool {
-        guard let selection = session.selection,
-              let view = panels[selection.displayID]?.contentView as? CaptureOverlayView else { return false }
-        return view.prepareForExport()
+        activeView?.prepareForExport() ?? false
     }
 
     private func startOver() {
-        guard session.phase == .ready, let selection = session.selection,
-              let view = panels[selection.displayID]?.contentView as? CaptureOverlayView else { return }
+        guard session.phase == .ready, let view = activeView else { return }
         view.clearAnnotations()
     }
 
+    private func popOut() {
+        guard session.phase == .ready, let id = session.id, let selection = session.selection,
+              let snapshot = snapshots[selection.displayID], let view = activeView,
+              view.prepareForEditor() else { return }
+        let editor = CaptureCoordinator(uploads: uploads, settings: settings)
+        editor.session = session
+        editor.document = document
+        editor.snapshots = [snapshot.displayID: snapshot]
+        let window = ScreenshotEditorWindow(canvas: view)
+        editor.editorWindow = window
+        view.onCopy = { [weak editor] in editor?.copy() }
+        view.onSave = { [weak editor] in editor?.save() }
+        view.onUpload = { [weak editor] in editor?.upload() }
+        view.onStartOver = { [weak editor] in editor?.startOver() }
+        view.onCancel = { [weak window] in window?.requestClose() }
+        view.onPopOut = nil
+        window.onClose = { [weak editor] in editor?.cancel() }
+        editor.onCaptureEnded = { [weak self] in self?.editors.removeValue(forKey: id) }
+        editors[id] = editor
+        editor.refreshUploadAvailability()
+        // Transfer ownership before resetting the overlay session.
+        document = AnnotationDocument()
+        finish(restoreFocus: false)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
     private func setExporting(_ exporting: Bool) {
+        editorWindow?.canvas.isExporting = exporting
         for panel in panels.values { (panel.contentView as? CaptureOverlayView)?.isExporting = exporting }
     }
 
     private func refreshUploadAvailability() {
+        editorWindow?.canvas.toolbar.setUploadAvailability(uploads?.canUpload == true,
+            hint: uploads?.uploadHint ?? "Sign in from the Snap menu to upload")
         for panel in panels.values {
             (panel.contentView as? CaptureOverlayView)?.toolbar.setUploadAvailability(uploads?.canUpload == true,
                 hint: uploads?.uploadHint ?? "Sign in from the Snap menu to upload")
@@ -207,7 +245,11 @@ final class CaptureCoordinator {
                     // No await between the cancellation check and the clipboard side effect.
                     NSPasteboard.general.clearContents()
                     guard NSPasteboard.general.writeObjects([item]) else { throw CaptureError.clipboardFailed }
-                    self.finish(restoreFocus: true)
+                    if let editorWindow = self.editorWindow {
+                        self.resumeExport(id)
+                        editorWindow.showCopyToast()
+                    }
+                    else { self.finish(restoreFocus: true) }
                 } catch { self?.exportFailed(error, id: id) }
             }
         } catch { exportFailed(error, id: id) }
@@ -221,9 +263,9 @@ final class CaptureCoordinator {
         panel.allowedContentTypes = [.png]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "Snap-\(Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false).timeZone(separator: .omitted)).replacingOccurrences(of: ":", with: "-" )).png"
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        panel.level = editorWindow == nil ? NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1) : .normal
         savePanel = panel
-        panel.begin { [weak self] result in
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] result in
             guard let self, self.session.isExporting(id) else { return }
             self.savePanel = nil
             guard result == .OK, let url = panel.url else {
@@ -245,12 +287,15 @@ final class CaptureCoordinator {
                 }
             } catch { self.exportFailed(error, id: id) }
         }
+        if let editorWindow { panel.beginSheetModal(for: editorWindow, completionHandler: completion) }
+        else { panel.begin(completionHandler: completion) }
     }
 
     private func resumeExport(_ id: UUID) {
         guard session.resumeAfterExport(id) else { return }
         exportTask = nil
         setExporting(false)
+        editorWindow?.makeKeyAndOrderFront(nil)
         if let selection = session.selection {
             panels[selection.displayID]?.makeKey()
         }
@@ -277,6 +322,9 @@ final class CaptureCoordinator {
         exportTask = nil
         savePanel?.cancel(nil)
         savePanel = nil
+        editorWindow?.onClose = nil
+        editorWindow?.close()
+        editorWindow = nil
         escapeShortcut = nil
         for panel in panels.values { panel.orderOut(nil); panel.close() }
         panels.removeAll()

@@ -2,7 +2,13 @@ import AppKit
 
 @MainActor
 final class CaptureToolbar: NSView {
-    static let preferredSize = CGSize(width: 442, height: 52)
+    static let preferredSize = CGSize(width: 476, height: 52)
+    var onPopOut: (() -> Void)?
+    var isInEditor = false {
+        didSet {
+            if isInEditor { configureEditorControls() }
+        }
+    }
     var onCopy: (() -> Void)?
     var onUpload: (() -> Void)?
     var onSave: (() -> Void)?
@@ -17,10 +23,14 @@ final class CaptureToolbar: NSView {
     private var originalOrigin = CGPoint.zero
     private var editingControls: [NSControl] = []
     private var uploadButton: NSButton!
+    private var popOutButton: NSButton!
+    private var cancelButton: NSButton!
     private var uploadAvailable = false
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private let tool = NSPopUpButton()
+    private var editorTools: NSSegmentedControl?
+    private var editorActions: [NSButton] = []
     private let color = NSPopUpButton()
     private let width = NSPopUpButton()
     private let shapeStyle = NSPopUpButton()
@@ -87,12 +97,17 @@ final class CaptureToolbar: NSView {
         redoButton = button("Redo", symbol: "arrow.uturn.forward", x: 218, action: #selector(redo))
         undoButton.toolTip = "Undo (⌘Z)"; redoButton.toolTip = "Redo (⌘⇧Z)"
         let copy = button("Copy", symbol: "doc.on.doc", x: 266, action: #selector(copyImage))
+        editorActions.append(copy)
         copy.toolTip = "Copy (⌘C)"
         let save = button("Save", symbol: "square.and.arrow.down", x: 300, action: #selector(saveImage))
+        editorActions.append(save)
         save.toolTip = "Save (⌘S)"
         uploadButton = button("Upload & Copy Link", symbol: "icloud.and.arrow.up", x: 334, action: #selector(upload))
-        _ = button("Clear Annotations", symbol: "arrow.counterclockwise", x: 368, action: #selector(startOver))
-        let cancel = button("Cancel", symbol: "xmark", x: 402, action: #selector(cancel))
+        let clear = button("Clear Annotations", symbol: "arrow.counterclockwise", x: 368, action: #selector(startOver))
+        editorActions.append(clear)
+        popOutButton = button("Open in Editor", symbol: "arrow.up.forward.square", x: 402, action: #selector(popOut))
+        let cancel = button("Cancel", symbol: "xmark", x: 436, action: #selector(cancel))
+        cancelButton = cancel
         cancel.toolTip = "Cancel (Esc)"
         editingControls.removeAll { $0 === cancel }
         toolTip = "Drag the six-dot handle to move the toolbar"
@@ -102,6 +117,86 @@ final class CaptureToolbar: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    private func configureEditorControls() {
+        hideHoverHint()
+        tool.isHidden = true
+        popOutButton.isHidden = true
+        toolTip = nil
+        layer?.borderWidth = 0
+        layer?.cornerRadius = 0
+        let symbols = ["cursorarrow", "pencil.tip", "arrow.up.right", "line.diagonal", "rectangle", "oval", "textformat", "drop.halffull", "1.circle.fill"]
+        let segments = NSSegmentedControl(images: symbols.compactMap { symbol($0).map(editorIcon) },
+                                          trackingMode: .selectOne, target: self, action: #selector(editorToolChanged))
+        segments.segmentStyle = .rounded
+        segments.controlSize = .regular
+        segments.selectedSegment = tool.indexOfSelectedItem
+        segments.setAccessibilityLabel("Drawing tools")
+        for (index, annotationTool) in AnnotationTool.allCases.enumerated() {
+            segments.setWidth(32, forSegment: index)
+            segments.setToolTip(annotationTool.rawValue, forSegment: index)
+        }
+        addSubview(segments)
+        editingControls.append(segments)
+        editorTools = segments
+        for button in [undoButton, redoButton, uploadButton, editorActions[0], editorActions[2]] {
+            if let image = button?.image { button?.image = editorIcon(image) }
+        }
+        for control in [color, width, shapeStyle, fontSize, stampSize] {
+            control.bezelStyle = .rounded
+            control.isBordered = true
+            control.controlSize = .regular
+        }
+        let save = editorActions[1]
+        save.title = "Save as…"
+        save.image = nil
+        save.imagePosition = .noImage
+        save.bezelStyle = .push
+        save.isBordered = true
+        save.font = .systemFont(ofSize: 12, weight: .medium)
+        cancelButton.title = "Done"
+        cancelButton.image = nil
+        cancelButton.imagePosition = .noImage
+        cancelButton.isBordered = true
+        cancelButton.bezelStyle = .push
+        cancelButton.bezelColor = .controlAccentColor
+        cancelButton.font = .systemFont(ofSize: 12, weight: .semibold)
+        cancelButton.contentTintColor = .white
+        cancelButton.attributedTitle = NSAttributedString(string: "Done", attributes: [
+            .font: cancelButton.font!, .foregroundColor: NSColor.white
+        ])
+        cancelButton.toolTip = "Close (Esc)"
+        cancelButton.setAccessibilityLabel("Done")
+        frame.size.height = 52
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    override func layout() {
+        super.layout()
+        guard isInEditor else { return }
+        editorTools?.frame = CGRect(x: 0, y: 12, width: 300, height: 28)
+        color.frame = CGRect(x: 318, y: 12, width: 42, height: 28)
+        for control in [width, shapeStyle, fontSize, stampSize] {
+            control.frame = CGRect(x: 366, y: 12, width: 42, height: 28)
+        }
+        blurLevel.frame = CGRect(x: 318, y: 16, width: 64, height: 20)
+        blurValue.frame = CGRect(x: 382, y: 18, width: 30, height: 17)
+        undoButton.frame.origin = CGPoint(x: 424, y: 10)
+        redoButton.frame.origin = CGPoint(x: 460, y: 10)
+        editorActions[2].frame.origin = CGPoint(x: 502, y: 10)
+        editorActions[0].frame.origin = CGPoint(x: bounds.width - 218, y: 10)
+        uploadButton.frame.origin = CGPoint(x: bounds.width - 184, y: 10)
+        editorActions[1].frame = CGRect(x: bounds.width - 144, y: 11, width: 78, height: 30)
+        cancelButton.frame = CGRect(x: bounds.width - 58, y: 11, width: 58, height: 30)
+    }
+
+    @objc private func editorToolChanged() {
+        guard let editorTools else { return }
+        let selected = AnnotationTool.allCases[editorTools.selectedSegment]
+        setTool(selected)
+        onTool?(selected)
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -122,7 +217,7 @@ final class CaptureToolbar: NSView {
     override func mouseExited(with event: NSEvent) { hideHoverHint() }
 
     private func updateHoverHint(with event: NSEvent) {
-        guard !isHidden, !exporting, dragOrigin == nil else { hideHoverHint(); return }
+        guard !isInEditor, !isHidden, !exporting, dragOrigin == nil else { hideHoverHint(); return }
         let point = convert(event.locationInWindow, from: nil)
         let control = subviews.compactMap { $0 as? NSControl }.first {
             !$0.isHidden && $0.frame.contains(point) && $0.toolTip != nil
@@ -155,6 +250,7 @@ final class CaptureToolbar: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard !isInEditor else { return }
         let shape = NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12)
         NSGraphicsContext.saveGraphicsState()
         shape.addClip()
@@ -175,7 +271,7 @@ final class CaptureToolbar: NSView {
         }
         separators.lineWidth = 1; separators.stroke()
         NSColor(white: 0.48, alpha: 1).setFill()
-        for x: CGFloat in [13, 19] {
+        for x: CGFloat in (isInEditor ? [] : [13, 19]) {
             for y: CGFloat in [20, 26, 32] {
                 NSBezierPath(ovalIn: CGRect(x: x - 1.25, y: y - 1.25, width: 2.5, height: 2.5)).fill()
             }
@@ -184,12 +280,13 @@ final class CaptureToolbar: NSView {
     }
 
     override func resetCursorRects() {
+        if isInEditor { addCursorRect(bounds, cursor: .arrow); return }
         addCursorRect(CGRect(x: 0, y: 0, width: 28, height: bounds.height), cursor: .openHand)
     }
 
     override func mouseDown(with event: NSEvent) {
         hideHoverHint()
-        guard !exporting else { return }
+        guard !exporting, !isInEditor else { return }
         dragOrigin = event.locationInWindow
         originalOrigin = frame.origin
         NSCursor.closedHand.set()
@@ -217,6 +314,8 @@ final class CaptureToolbar: NSView {
         undoButton.isEnabled = canUndo && !exporting
         redoButton.isEnabled = canRedo && !exporting
     }
+
+    @objc private func popOut() { hideHoverHint(); onPopOut?() }
 
     func setUploadAvailability(_ available: Bool, hint: String) {
         uploadAvailable = available
@@ -271,6 +370,20 @@ final class CaptureToolbar: NSView {
     private func symbol(_ name: String) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 16, weight: .regular))
+    }
+
+    private func editorIcon(_ source: NSImage) -> NSImage {
+        let canvasSize = CGSize(width: 20, height: 20)
+        let scale = 16 / max(source.size.width, source.size.height)
+        let size = CGSize(width: source.size.width * scale, height: source.size.height * scale)
+        let image = NSImage(size: canvasSize, flipped: false) { _ in
+            source.draw(in: CGRect(x: (canvasSize.width - size.width) / 2,
+                                   y: (canvasSize.height - size.height) / 2,
+                                   width: size.width, height: size.height))
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func toolIcon(_ name: String) -> NSImage? {
@@ -367,6 +480,7 @@ final class CaptureToolbar: NSView {
     }
     func setTool(_ selected: AnnotationTool) {
         tool.selectItem(at: AnnotationTool.allCases.firstIndex(of: selected)!)
+        editorTools?.selectedSegment = tool.indexOfSelectedItem
         setContextualTool(selected)
         tool.toolTip = "Tool"
     }

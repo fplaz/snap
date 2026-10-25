@@ -25,6 +25,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                              handle: SelectionGeometry.ResizeHandle)?
     private var annotationOffset: CGPoint = .zero
     private let borderHitWidth: CGFloat = 7
+    private(set) var isInEditor = false
     private var contentOrigin: CGPoint {
         CGPoint(x: (selection?.minX ?? 0) + annotationOffset.x, y: (selection?.minY ?? 0) + annotationOffset.y)
     }
@@ -39,6 +40,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     var onUpload: (() -> Void)?
     var onSave: (() -> Void)?
     var onStartOver: (() -> Void)?
+    var onPopOut: (() -> Void)?
     var isExporting = false {
         didSet {
             if isExporting { restoreTemporaryTool() }
@@ -71,6 +73,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         toolbar.onSave = { [weak self] in self?.onSave?() }
         toolbar.onCancel = { [weak self] in self?.onCancel?() }
         toolbar.onStartOver = { [weak self] in self?.onStartOver?() }
+        toolbar.onPopOut = { [weak self] in self?.onPopOut?() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
@@ -89,7 +92,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: toolCursor)
-        if let selection, dragOrigin == nil, !isExporting {
+        if let selection, dragOrigin == nil, !isExporting, !isInEditor {
             let cursor: NSCursor = areaDrag == nil ? .openHand : .closedHand
             let outer = selection.insetBy(dx: -borderHitWidth, dy: -borderHitWidth)
             let edges = [
@@ -104,7 +107,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                               cursor: areaResize == nil ? .openHand : .closedHand)
             }
         }
-        if !toolbar.isHidden {
+        if !toolbar.isHidden, !isInEditor {
             addCursorRect(toolbar.frame, cursor: .arrow)
             addCursorRect(CGRect(x: toolbar.frame.minX, y: toolbar.frame.minY,
                                  width: 28, height: toolbar.frame.height), cursor: .openHand)
@@ -115,7 +118,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         if areaDrag != nil { NSCursor.closedHand.set(); return }
         if areaResize != nil { NSCursor.closedHand.set(); return }
         let point = convert(event.locationInWindow, from: nil)
-        if !toolbar.isHidden, toolbar.frame.contains(point) {
+        if !isInEditor, !toolbar.isHidden, toolbar.frame.contains(point) {
             if point.x < toolbar.frame.minX + 28 { NSCursor.openHand.set() }
             else { NSCursor.arrow.set() }
         }
@@ -129,12 +132,12 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var toolCursor: NSCursor { tool == .select ? .arrow : .crosshair }
 
     private func resizeHandle(at point: CGPoint) -> SelectionGeometry.ResizeHandle? {
-        guard let selection, dragOrigin == nil, !isExporting else { return nil }
+        guard !isInEditor, let selection, dragOrigin == nil, !isExporting else { return nil }
         return SelectionGeometry.ResizeHandle.allCases.first { $0.hitRect(in: selection).contains(point) }
     }
 
     private func isSelectionBorder(_ point: CGPoint) -> Bool {
-        guard let selection, dragOrigin == nil, !isExporting else { return false }
+        guard !isInEditor, let selection, dragOrigin == nil, !isExporting else { return false }
         if !toolbar.isHidden, toolbar.frame.contains(point) { return false }
         return (selection.insetBy(dx: -borderHitWidth, dy: -borderHitWidth).contains(point)
                 && !selection.insetBy(dx: borderHitWidth, dy: borderHitWidth).contains(point))
@@ -144,7 +147,16 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     override func mouseEntered(with event: NSEvent) { cursorUpdate(with: event) }
 
     override func draw(_ dirtyRect: NSRect) {
-        screenshot.draw(in: bounds)
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        if isInEditor {
+            // A normal NSView can draw beyond its bounds. The editor must never
+            // expose the frozen display outside the selected screenshot.
+            NSBezierPath(rect: bounds).addClip()
+            screenshot.draw(in: bounds, from: bounds, operation: .sourceOver, fraction: 1)
+        } else {
+            screenshot.draw(in: CGRect(origin: .zero, size: snapshot.logicalSize))
+        }
         let mask = NSBezierPath(rect: bounds)
         if let selection, selection.width > 0, selection.height > 0 {
             mask.appendRect(selection)
@@ -170,7 +182,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                                         return image
                                     },
                                     screenshotRect: CGRect(x: -contentOrigin.x, y: -contentOrigin.y,
-                                                           width: bounds.width, height: bounds.height))
+                                                           width: snapshot.logicalSize.width, height: snapshot.logicalSize.height))
             if let selected = annotations.first(where: { $0.id == selectedID }) {
                 NSColor.systemBlue.setStroke()
                 let outline = NSBezierPath(rect: selected.bounds.insetBy(dx: -4, dy: -4))
@@ -178,6 +190,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
                 outline.stroke()
             }
             NSGraphicsContext.restoreGraphicsState()
+            guard !isInEditor else { return }
             NSColor.white.withAlphaComponent(0.95).setStroke()
             let border = NSBezierPath(rect: selection)
             border.lineWidth = 1
@@ -321,6 +334,22 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
         toolbar.movementBounds = usableBounds
         toolbar.isHidden = false
         window?.invalidateCursorRects(for: self)
+    }
+
+    // Keep display coordinates and annotation offsets intact while clipping to the crop.
+    // Moving the actual view also preserves undo history and the current tool/style.
+    func prepareForEditor() -> Bool {
+        guard !isInEditor, !isExporting, let selection, prepareForExport() else { return false }
+        restoreTemporaryTool()
+        isInEditor = true
+        toolbar.removeFromSuperview()
+        toolbar.isInEditor = true
+        removeFromSuperview()
+        frame = CGRect(origin: .zero, size: selection.size)
+        bounds = selection
+        clipsToBounds = true
+        needsDisplay = true
+        return true
     }
 
     func clearAnnotations() {
