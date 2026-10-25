@@ -62,9 +62,15 @@ struct TutorialStep {
         TutorialStep(title: "Make your point with annotations",
                      detail: "Choose a tool from the tool menu. Rectangle and Ellipse offer outline or filled styles. With “Blur”, drag over an area and adjust its strength. With “Number stamps”, click to place colored circles with white numbers: 1, 2, 3… Other marks use color, line width, or text size.",
                      tip: "“Select” moves or deletes marks; double-click text to edit it. Use ⌘Z to undo and ⌘⇧Z to redo."),
+        TutorialStep(title: "Keep editing in a window",
+                     detail: "After selecting an area, click “Open in Editor” — the arrow leaving a square. Your screenshot, annotations, and undo history move into a window with the tools in its header. Keep editing while using your desktop or taking more screenshots.",
+                     tip: "⌘C copies without closing the editor. Save and Upload close it after success. Done asks before discarding; Escape dismisses that confirmation."),
         TutorialStep(title: "Switch tools without slowing down",
                      detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools, or Shift+Tab to cycle backward.",
                      tip: "While editing text, Space and Tab keep their normal typing behavior. Reopen this guide anytime from Snap → “Tutorial…”."),
+        TutorialStep(title: "Support Snap",
+                     detail: "Snap is free and created by [@fernandoplaz](https://x.com/fernandoplaz). If you enjoy using it, support its development by [buying Fernando a coffee](https://buymeacoffee.com/fernandoplaz).",
+                     tip: "Thanks for using Snap! You can also find “Buy me a coffee” in the Snap menu anytime."),
     ]
 }
 
@@ -88,7 +94,7 @@ private struct TutorialView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(page.title).font(.system(size: 25, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
-                Text(page.detail).font(.system(size: 14)).lineSpacing(4)
+                Text(LocalizedStringKey(page.detail)).font(.system(size: 14)).lineSpacing(4)
                 Text(page.tip).font(.system(size: 12)).foregroundStyle(.secondary).lineSpacing(3)
             }
             Spacer(minLength: 0)
@@ -147,6 +153,45 @@ private struct TutorialIllustration: View {
                 icon("oval", label: "Ellipse")
                 icon("textformat", label: "Text")
                 icon("drop.halffull", label: "Blur")
+            }
+        case 4:
+            HStack(spacing: 24) {
+                icon("arrow.up.forward.square", label: "Open in Editor")
+                Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                VStack(spacing: 0) {
+                    HStack(spacing: 9) {
+                        HStack(spacing: 4) {
+                            ForEach(0..<3) { _ in
+                                Circle().fill(.white.opacity(0.3)).frame(width: 5, height: 5)
+                            }
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "cursorarrow")
+                        Image(systemName: "pencil.tip")
+                        Image(systemName: "rectangle")
+                        Image(systemName: "textformat")
+                    }
+                    .font(.system(size: 11))
+                    .padding(10)
+                    .background(.white.opacity(0.08))
+                    Divider()
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.12))
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundStyle(.red)
+                    }
+                    .padding(15)
+                }
+                .frame(width: 210, height: 120)
+                .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.25)))
+            }
+        case 6:
+            VStack(spacing: 16) {
+                Image(systemName: "cup.and.saucer.fill").font(.system(size: 44))
+                Text("Made by Fernando").font(.caption).foregroundStyle(.secondary)
             }
         default:
             HStack(spacing: 48) {

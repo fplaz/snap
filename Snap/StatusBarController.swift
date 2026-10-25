@@ -133,6 +133,9 @@ final class StatusBarController: NSObject {
         update.target = self
         update.isEnabled = updater.updater.canCheckForUpdates
         menu.addItem(update)
+        let coffee = NSMenuItem(title: "Buy me a coffee", action: #selector(buyMeACoffee), keyEquivalent: "")
+        coffee.target = self
+        menu.addItem(coffee)
         let quit = NSMenuItem(title: "Quit Snap", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
@@ -169,5 +172,9 @@ final class StatusBarController: NSObject {
         DispatchQueue.main.async { [weak self] in self?.updater.checkForUpdates(nil) }
     }
     @objc private func copyLink() { uploads.copyLatestLink() }
+    @objc private func buyMeACoffee() {
+        guard let url = URL(string: "https://buymeacoffee.com/fernandoplaz") else { return }
+        NSWorkspace.shared.open(url)
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 }

@@ -58,7 +58,9 @@ Use the same built app location across launches. Changing its identity or signin
 
 ## Capture
 
-On first launch, a five-step tutorial covers capture, moving and resizing the area, Google sign-in and uploads, annotation tools, and keyboard shortcuts. Skip or close it at any time; it appears automatically only once per macOS user, including for existing users opening this update. Reopen it from **Snap → Tutorial…**. Starting a capture hides the tutorial.
+On first launch, a seven-step tutorial covers capture, moving and resizing the area, Google sign-in and uploads, annotation tools, pop-out editing, keyboard shortcuts, and supporting Snap. Skip or close it at any time; it appears automatically only once per macOS user, including for existing users opening this update. Reopen it from **Snap → Tutorial…**. Starting a capture hides the tutorial.
+
+Snap is free and created by [@fernandoplaz](https://x.com/fernandoplaz). Support its development through **Snap → Buy me a coffee** or [buy Fernando a coffee](https://buymeacoffee.com/fernandoplaz).
 
 1. Press **⌘⇧7**, or choose **Take Screenshot** from the menu bar.
 2. If Screen Recording access is missing, Snap shows **Allow Screen Recording** and **Not Now**. Allow calls the native macOS request API on every confirmed attempt, including after access is removed. Follow the native dialog to enable Snap. Reopen Snap if needed, then try the screenshot shortcut again.
