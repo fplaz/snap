@@ -51,7 +51,7 @@ struct TutorialStep {
 
     static let all: [TutorialStep] = [
         TutorialStep(title: "Take your first screenshot",
-                     detail: "Press ⌘⇧7 to select an area and annotate it. Use ⌘⇧6 to select an area and copy it immediately. Both options are also in the Snap menu.",
+                     detail: "Press ⌘⇧7 or choose “Take screenshot and annotate” from the Snap menu. For a quick copy, choose “Take screenshot and copy”.",
                      tip: "Allow Screen Recording when macOS asks. Copy with ⌘C or save a PNG with ⌘S."),
         TutorialStep(title: "Adjust your screenshot area",
                      detail: "Drag the border to move the selected area. Drag any corner or the black handle at the middle of an edge to resize it.",
@@ -67,7 +67,7 @@ struct TutorialStep {
                      tip: "⌘C copies without closing the editor. Save and Upload close it after success. Done asks before discarding; Escape dismisses that confirmation."),
         TutorialStep(title: "Switch tools without slowing down",
                      detail: "Hold Space to use the pointer (“Select”) tool. Release it to return to your previous tool. Press Tab to cycle through all tools, or Shift+Tab to cycle backward.",
-                     tip: "While editing text, Space and Tab keep their normal typing behavior. Reopen this guide anytime from Snap → “Tutorial…”."),
+                     tip: "While editing text, Space inserts a space. Tab and Shift+Tab finish editing and switch tools. Reopen this guide anytime from Snap → “Tutorial…”."),
         TutorialStep(title: "Support Snap",
                      detail: "Snap is free and created by [@fernandoplaz](https://x.com/fernandoplaz). If you enjoy using it, support its development by [buying Fernando a coffee](https://buymeacoffee.com/fernandoplaz).",
                      tip: "Thanks for using Snap! You can also find “Buy me a coffee” in the Snap menu anytime."),

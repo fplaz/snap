@@ -528,15 +528,33 @@ final class AnnotationInteractionTests: XCTestCase {
 
     @MainActor
     func testWholeCanvasDragStartsNearEitherSideOfBorderWithoutDrawing() async throws {
-        for startX: CGFloat in [14, 26] {
+        for offset: CGFloat in [-3, 3] {
             let (window, view, document) = try fixture()
             defer { window.close() }
             let original = try XCTUnwrap(view.selection)
+            let startX = original.minX + offset
             view.mouseDown(with: mouse(.leftMouseDown, x: startX, y: 160))
             view.mouseUp(with: mouse(.leftMouseUp, x: startX + 15, y: 170))
             XCTAssertEqual(view.selection, original.offsetBy(dx: 15, dy: 10))
             XCTAssertTrue(document.annotations.isEmpty)
         }
+    }
+
+    @MainActor
+    func testDrawingStartsFivePointsInsideSelectionBorder() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        let original = try XCTUnwrap(view.selection)
+        view.toolbar.onTool?(.pen)
+
+        view.mouseDown(with: mouse(.leftMouseDown, x: original.minX + 5, y: 160))
+        view.mouseDragged(with: mouse(.leftMouseDragged, x: original.minX + 20, y: 170))
+        view.mouseUp(with: mouse(.leftMouseUp, x: original.minX + 30, y: 180))
+
+        XCTAssertEqual(view.selection, original)
+        XCTAssertEqual(document.annotations.count, 1)
+        XCTAssertEqual(document.annotations.first?.tool, .pen)
+        XCTAssertEqual(document.annotations.first?.points.first, CGPoint(x: 5, y: 160 - original.minY))
     }
 
     @MainActor
@@ -914,14 +932,47 @@ final class AnnotationInteractionTests: XCTestCase {
     }
 
     @MainActor
-    func testShortcutsIgnoreTextEditingExportAndUnfinishedSelection() async throws {
+    func testTabFinishesTextEditingAndCyclesToolsInBothWindows() async throws {
+        let (window, view, document) = try fixture()
+        defer { window.close() }
+        let panel = CaptureOverlayPanel(frame: view.frame)
+        defer { panel.close() }
+        panel.contentView = view
+
+        func typeAndCycle(in window: NSWindow, text: String,
+                          modifiers: NSEvent.ModifierFlags, expectedTool: AnnotationTool) throws {
+            view.toolbar.onTool?(.text)
+            let location = view.convert(CGPoint(x: 50, y: 200), to: nil)
+            view.mouseDown(with: mouse(.leftMouseDown, x: location.x, y: location.y))
+            let textEditor = try XCTUnwrap(window.firstResponder as? AnnotationTextEditor)
+            textEditor.insertText(text, replacementRange: NSRange(location: 0, length: 0))
+
+            window.sendEvent(key(48, modifiers: modifiers))
+
+            XCTAssertTrue(window.firstResponder === view)
+            XCTAssertNil(textEditor.superview)
+            XCTAssertEqual(document.annotations.last?.text, text)
+            XCTAssertEqual(try toolPopup(view).indexOfSelectedItem, AnnotationTool.allCases.firstIndex(of: expectedTool))
+        }
+
+        try typeAndCycle(in: panel, text: "Overlay text", modifiers: [], expectedTool: .blur)
+        XCTAssertTrue(view.prepareForEditor())
+        let editor = ScreenshotEditorWindow(canvas: view)
+        defer { editor.close() }
+        try typeAndCycle(in: editor, text: "Editor text", modifiers: .shift, expectedTool: .ellipse)
+        let toolSegments = try XCTUnwrap(view.toolbar.subviews.compactMap { $0 as? NSSegmentedControl }.first)
+        XCTAssertEqual(toolSegments.selectedSegment, AnnotationTool.allCases.firstIndex(of: .ellipse))
+        XCTAssertEqual(document.annotations.map(\.text), ["Overlay text", "Editor text"])
+    }
+
+    @MainActor
+    func testShortcutsRespectTextInputExportAndUnfinishedSelection() async throws {
         let (window, view, _) = try fixture()
         defer { window.close() }
         view.toolbar.onTool?(.text)
         view.mouseDown(with: mouse(.leftMouseDown, x: 50, y: 200))
         XCTAssertFalse(view.handleToolShortcut(key(49)))
-        XCTAssertFalse(view.handleToolShortcut(key(48)))
-        XCTAssertFalse(view.handleToolShortcut(key(48, modifiers: .shift)))
+        XCTAssertFalse(view.handleToolShortcut(key(48, modifiers: .option)))
         let editor = try XCTUnwrap(view.subviews.compactMap { $0 as? AnnotationTextEditor }.first)
         editor.insertText("Two words", replacementRange: NSRange(location: 0, length: 0))
         XCTAssertEqual(editor.string, "Two words")

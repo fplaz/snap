@@ -24,7 +24,7 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
     private var areaResize: (start: CGPoint, selection: CGRect, toolbar: CGRect, offset: CGPoint,
                              handle: SelectionGeometry.ResizeHandle)?
     private var annotationOffset: CGPoint = .zero
-    private let borderHitWidth: CGFloat = 7
+    private let borderHitWidth: CGFloat = 4
     private(set) var isInEditor = false
     private var contentOrigin: CGPoint {
         CGPoint(x: (selection?.minX ?? 0) + annotationOffset.x, y: (selection?.minY ?? 0) + annotationOffset.y)
@@ -405,12 +405,12 @@ final class CaptureOverlayView: NSView, NSTextViewDelegate {
             restoreTemporaryTool()
             return true
         }
-        guard event.type == .keyDown, selection != nil, dragOrigin == nil,
-              !isExporting, textEditor == nil else { return false }
+        guard event.type == .keyDown, selection != nil, dragOrigin == nil, !isExporting else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
         guard modifiers.isEmpty || (event.keyCode == 48 && modifiers == .shift) else { return false }
         switch event.keyCode {
         case 49:
+            guard textEditor == nil else { return false }
             if !event.isARepeat, toolBeforeSpace == nil {
                 cancelGesture()
                 toolBeforeSpace = tool

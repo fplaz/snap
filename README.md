@@ -62,12 +62,12 @@ On first launch, a seven-step tutorial covers capture, moving and resizing the a
 
 Snap is free and created by [@fernandoplaz](https://x.com/fernandoplaz). Support its development through **Snap → Buy me a coffee** or [buy Fernando a coffee](https://buymeacoffee.com/fernandoplaz).
 
-1. Press **⌘⇧7**, or choose **Take Screenshot** from the menu bar.
+1. Press **⌘⇧7**, or choose **Take screenshot and annotate** from the Snap menu.
 2. If Screen Recording access is missing, Snap shows **Allow Screen Recording** and **Not Now**. Allow calls the native macOS request API on every confirmed attempt, including after access is removed. Follow the native dialog to enable Snap. Reopen Snap if needed, then try the screenshot shortcut again.
 3. Drag a rectangular area. Each display is frozen before the overlay appears; the selected area is undimmed.
 4. Click **Copy** (⌘C), **Save** (⌘S), or **Cancel** (Escape).
 
-For a quick copy, press **⌘⇧6** or choose **Take screenshot and copy** from the Snap menu. Drag to select an area; releasing the mouse copies it immediately and closes capture, skipping the annotation toolbar. Escape cancels capture. **⌘⇧7** keeps the usual annotation workflow.
+For a quick copy, choose **Take screenshot and copy** from the Snap menu. Drag to select an area, then release the mouse to copy it immediately and close capture. Escape cancels capture.
 
 After selection, drawing keeps the crop fixed. Use **Clear Annotations** to immediately remove all drawing and text while keeping the selected area and toolbar open. Selection stays within the display where the drag starts. Canceling the native save panel keeps the screenshot and annotations available. Copy or successful save ends capture and returns focus to your previous app.
 
@@ -89,7 +89,7 @@ With **Blur**, drag a rectangle over text or another area of the screenshot. Adj
 
 Use **Select** to click a mark, move it, change its style, or delete it. Double-click text with Select to edit it. **⌘Z** undoes one completed annotation operation; **⌘⇧Z** redoes it.
 
-After selecting the screenshot area, hold **Space** to temporarily use Select; releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, Text, Blur, and Number stamps, or **Shift+Tab** to cycle backward. These shortcuts leave normal text input available while editing an annotation.
+After selecting the screenshot area, hold **Space** to temporarily use Select. Releasing it restores your previous tool. Press **Tab** to cycle through Select, Pen, Arrow, Line, Rectangle, Ellipse, Text, Blur, and Number stamps, or **Shift+Tab** to cycle backward. While editing text, **Space** inserts a space. **Tab** and **Shift+Tab** finish the edit and switch tools.
 
 Text supports multiple lines. Return inserts a newline; **⌘Return** or clicking outside commits the edit. Escape cancels the current text edit and restores its previous value. Native text copy and undo remain available while typing. Toolbar Copy/Save commits pending text before exporting.
 
@@ -97,7 +97,7 @@ Escape first cancels an unfinished drawing, then clears a selected mark, then ca
 
 Snap captures only when invoked. It does not continuously record or upload screenshots. Exports preserve the source image's pixel resolution, including Retina scaling.
 
-If another app owns ⌘⇧7 or ⌘⇧6, the corresponding Snap menu item shows a shortcut warning in its tooltip; both menu actions still work. Shortcut customization is deferred.
+If another app owns ⌘⇧7, **Take screenshot and annotate** shows a shortcut warning in its tooltip. You can still click the menu item to capture.
 
 For isolated cloud validation before provisioning is configured, build/test without signing into a separate product directory:
 
@@ -113,7 +113,9 @@ The unhosted test target compiles the app sources without building a second Snap
 
 ## Google Drive and history
 
-For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.5.dmg`; the published installer is named `SNAP.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
+For an unnotarized website download, first run `bash scripts/setup-local-signing.sh`, then `bash scripts/build-dmg.sh`. The output is `.build/distribution/dist/Snap-1.6.dmg`; the published installer is named `SNAP.dmg`. The build creates a project-local Python environment with pinned `dmgbuild` tooling on first use. The installer opens a dark metallic Finder layout with Snap, an Applications shortcut, and drag-to-install instructions; its layout and background files are hidden. No separate installation guide is bundled. The app supports Intel and Apple Silicon on macOS 14 or newer and uses the file-based Keychain without provisioning-backed entitlements.
+
+The first time you open Snap from Applications, it sets itself to open at login. Manage it in **System Settings → General → Login Items & Extensions**.
 
 Releases use the retained **Snap Local Distribution** self-signed identity from your login Keychain. Preserve and securely back up that identity and its private key for updates. `SNAP_SIGNING_IDENTITY` can override the identity; the build never silently falls back to ad-hoc signing. Local trust applies only to the creator's code-signing policy; no certificate or private key needs to be installed on users' Macs. This does not provide Developer ID trust or notarization: users must approve the downloaded app through Privacy & Security. The Google OAuth project must be configured for production before accepting arbitrary users.
 

@@ -1,4 +1,6 @@
 import AppKit
+import os
+import ServiceManagement
 import Sparkle
 
 @main
@@ -14,6 +16,8 @@ enum SnapMain {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+    private static let loginItemsLogger = Logger(subsystem: "cl.fplaz.snap", category: "LoginItems")
+
     private var account: AccountController?
     private var uploads: UploadCoordinator?
     private var history: ScreenshotHistoryController?
@@ -73,7 +77,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         NSAppleEventManager.shared().setEventHandler(account, andSelector: #selector(AccountController.handleGetURL(_:reply:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
         account.restore()
+        configureLaunchAtLogin()
         tutorial.showOnFirstLaunch()
+    }
+
+    private func configureLaunchAtLogin() {
+        let defaults = UserDefaults.standard
+        let configuredKey = "hasConfiguredLaunchAtLogin"
+        guard !defaults.bool(forKey: configuredKey) else { return }
+
+        // Register the installed copy, so macOS records a stable location for the app.
+        let appPath = Bundle.main.bundleURL.resolvingSymlinksInPath().pathComponents
+        let applications = FileManager.default.urls(for: .applicationDirectory, in: [.localDomainMask, .userDomainMask])
+        guard applications.contains(where: { appPath.starts(with: $0.resolvingSymlinksInPath().pathComponents) }) else {
+            return
+        }
+
+        let service = SMAppService.mainApp
+        switch service.status {
+        case .notRegistered, .notFound:
+            do {
+                try service.register()
+            } catch {
+                let status = service.status
+                guard status == .enabled || status == .requiresApproval else {
+                    Self.loginItemsLogger.error("Could not register Snap to open at login: \(error.localizedDescription)")
+                    return
+                }
+            }
+        case .enabled, .requiresApproval:
+            break
+        @unknown default:
+            return
+        }
+
+        // Leave any later changes to the login item in System Settings intact.
+        defaults.set(true, forKey: configuredKey)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
